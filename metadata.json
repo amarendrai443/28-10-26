@@ -1,0 +1,6 @@
+{
+  "name": "Nhealth™ — Healthcare at Home",
+  "description": "Powering the future of healthcare at home with reliable diagnostic sample collection, expert doctor home visits, and professional care coordination.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

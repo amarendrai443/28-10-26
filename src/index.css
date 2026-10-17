@@ -1,0 +1,316 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Poppins', 'Montserrat', sans-serif;
+  --color-nhealth-navy: #002b49;
+  --color-nhealth-navy-dark: #001d31;
+  --color-nhealth-navy-light: #003e6b;
+  --color-nhealth-teal: #008080;
+  --color-nhealth-teal-dark: #006666;
+  --color-nhealth-teal-light: #e6f4f4;
+  --color-nhealth-bg: #f8fafc;
+}
+
+:root {
+  --primary: #002b49;
+  --primary-dark: #001d31;
+  --accent: #008080;
+  --accent-hover: #006666;
+  --light-bg: #f8fafc;
+  --text-dark: #1e293b;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+}
+
+body {
+  color: var(--text-dark);
+  background-color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+}
+
+/* Header Logo Typography */
+.brand-font-poppins {
+  font-family: 'Poppins', 'Montserrat', sans-serif;
+  font-weight: 600;
+}
+
+/* Continuous smooth infinite marquee */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll 36s linear infinite;
+}
+
+.animate-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-track {
+    animation-duration: 90s;
+  }
+}
+
+/* Smooth continuous horizontal scrolling ticker/slider (left to right) */
+@keyframes ticker-scroll-ltr {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-ticker-ltr {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: ticker-scroll-ltr 20s linear infinite;
+}
+
+.animate-ticker-ltr:hover {
+  animation-play-state: paused;
+}
+
+/* Floating WhatsApp glowing ripple and heartbeat pulse */
+@keyframes whatsapp-ripple {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.7);
+  }
+  65% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 16px rgba(37, 211, 102, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(37, 211, 102, 0);
+  }
+}
+
+.whatsapp-pulse {
+  animation: whatsapp-ripple 2.4s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Floating Emergency SOS glowing ripple and heartbeat pulse */
+@keyframes emergency-ripple {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.75);
+  }
+  65% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 16px rgba(220, 38, 38, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+}
+
+.emergency-pulse {
+  animation: emergency-ripple 2.2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Floating Nhealth Vital Lens glowing ripple and vital wave pulse */
+@keyframes vital-lens-ripple {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.75);
+  }
+  65% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 16px rgba(168, 85, 247, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0);
+  }
+}
+
+.vital-lens-pulse {
+  animation: vital-lens-ripple 2.3s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Gold Shining / Glitter Animation Effect */
+@keyframes gold-shimmer-sweep {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes gold-sparkle-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px rgba(212, 175, 55, 0.5)) drop-shadow(0 0 12px rgba(250, 204, 21, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 9px rgba(253, 224, 71, 0.85)) drop-shadow(0 0 22px rgba(234, 179, 8, 0.7));
+  }
+}
+
+.gold-shining-text {
+  background: linear-gradient(
+    110deg,
+    #bf953f 0%,
+    #fcf6ba 22%,
+    #b38728 45%,
+    #fbf5b7 55%,
+    #fbf5b7 70%,
+    #aa771c 85%,
+    #bf953f 100%
+  );
+  background-size: 220% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: gold-shimmer-sweep 3s linear infinite;
+  display: inline-block;
+}
+
+.gold-glitter-glow {
+  animation: gold-sparkle-pulse 2.8s ease-in-out infinite;
+}
+
+/* Dedicated Dual Hero Responsive Visibility (Mobile & Tablet < 1024px vs Desktop >= 1024px) */
+@media (min-width: 1024px) {
+  .hero-desktop-only {
+    display: flex !important;
+  }
+  .hero-mobile-only {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .hero-desktop-only {
+    display: none !important;
+  }
+  .hero-mobile-only {
+    display: block !important;
+  }
+}
+
+/* Continuous slow crawl animation for mobile scooty rider & following auto */
+@keyframes convoy-drive {
+  0% {
+    transform: translateX(calc(-100% - 10px));
+  }
+  100% {
+    transform: translateX(100vw);
+  }
+}
+
+.animate-convoy-ride {
+  animation: convoy-drive 15s linear infinite;
+  will-change: transform;
+}
+
+/* Continuous calm, slow crawl animation across wide desktop screens */
+@keyframes convoy-drive-desktop {
+  0% {
+    transform: translateX(calc(-100% - 20px));
+  }
+  100% {
+    transform: translateX(100vw);
+  }
+}
+
+.animate-convoy-desktop {
+  animation: convoy-drive-desktop 32s linear infinite;
+  will-change: transform;
+}
+
+/* Pause animation immediately on hover, touch/active, or focus so user can easily interact and click */
+.animate-convoy-desktop:hover,
+.animate-convoy-desktop:focus-within,
+.animate-convoy-desktop.is-paused,
+.animate-convoy-ride:hover,
+.animate-convoy-ride:focus-within,
+.animate-convoy-ride.is-paused,
+.animate-scooty-ride:hover,
+.animate-scooty-ride:focus-within,
+.animate-scooty-ride.is-paused {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-convoy-ride,
+  .animate-scooty-ride {
+    animation-duration: 40s;
+  }
+}
+
+/* PWA Glowing Ripple Animation for App Icon */
+@keyframes pwa-ripple-glow {
+  0% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(0, 128, 128, 0.7), 0 0 0 0 rgba(56, 189, 248, 0.5);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 14px rgba(0, 128, 128, 0), 0 0 25px 8px rgba(56, 189, 248, 0.4);
+  }
+  100% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(0, 128, 128, 0), 0 0 0 0 rgba(56, 189, 248, 0);
+  }
+}
+
+@keyframes pwa-ring-pulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.18);
+  }
+}
+
+.animate-pwa-ripple {
+  animation: pwa-ripple-glow 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-pwa-ring {
+  animation: pwa-ring-pulse 2s ease-in-out infinite;
+}
+
+/* Splash Screen Startup Transitions */
+@keyframes splash-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-splash-in {
+  animation: splash-fade-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
