@@ -59,7 +59,13 @@ import { PartnerOnboardingPage } from './components/PartnerOnboardingPage';
 import { AdminDashboardPage } from './components/AdminDashboardPage';
 import { CorporateEnquiriesPage } from './components/CorporateEnquiriesPage';
 import { RoleBasedDashboard } from './components/RoleBasedDashboard';
-import { PartnerApplication, PartnerStatus, INITIAL_PARTNERS } from './types/partner';
+import {
+  PartnerApplication,
+  PartnerStatus,
+  INITIAL_PARTNERS,
+  calculateDaysInactive,
+  INACTIVITY_THRESHOLD_DAYS
+} from './types/partner';
 import { registerLivePartnerDoctor, unregisterPartnerDoctor } from './data/doctorsData';
 import { ServiceItem, BookingFormData, UserAccount, ConfirmedBooking } from './types/serviceBooking';
 import { EXTRACTED_SERVICES } from './data/servicesData';
@@ -352,7 +358,35 @@ export default function App() {
   const [partners, setPartners] = useState<PartnerApplication[]>(() => {
     try {
       const saved = localStorage.getItem('nhealth_partners');
-      return saved ? JSON.parse(saved) : INITIAL_PARTNERS;
+      let baseList = INITIAL_PARTNERS;
+      if (saved) {
+        const parsed: PartnerApplication[] = JSON.parse(saved);
+        const existingIds = new Set(parsed.map((p) => p.id));
+        const merged = [...parsed];
+        INITIAL_PARTNERS.forEach((p) => {
+          if (!existingIds.has(p.id)) {
+            merged.push(p);
+          }
+        });
+        baseList = merged;
+      }
+      // Phase 3: Enforce Automatic Suspension Rule:
+      // If a partner account remains inactive without login or operational activity for >3 months (90 days),
+      // automatically flag the account as "Suspended due to Inactivity".
+      return baseList.map((p) => {
+        if (p.status === 'Live' && calculateDaysInactive(p) > INACTIVITY_THRESHOLD_DAYS) {
+          return {
+            ...p,
+            status: 'Suspended' as PartnerStatus,
+            isSuspendedDueToInactivity: true,
+            suspensionReason:
+              p.suspensionReason ||
+              'Suspended due to Inactivity (>90 days without operational activity or login)',
+            suspensionDate: p.suspensionDate || new Date().toISOString(),
+          };
+        }
+        return p;
+      });
     } catch {
       return INITIAL_PARTNERS;
     }
@@ -361,7 +395,7 @@ export default function App() {
   // Keep empaneled live doctors in sync with live partners on mount
   useEffect(() => {
     partners.forEach((p) => {
-      if (p.status === 'Live' && p.category === 'Doctor') {
+      if (p.status === 'Live' && !p.isSuspendedDueToInactivity && !p.isRestrictedByAdmin && p.category === 'Doctor') {
         registerLivePartnerDoctor(p);
       }
     });
@@ -370,6 +404,30 @@ export default function App() {
   const handleAddPartner = (newPartner: PartnerApplication) => {
     setPartners((prev) => {
       const updated = [newPartner, ...prev];
+      try {
+        localStorage.setItem('nhealth_partners', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleUpdatePartner = (partnerId: string, updates: Partial<PartnerApplication>) => {
+    setPartners((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === partnerId) {
+          const merged = { ...p, ...updates };
+          if (p.category === 'Doctor') {
+            const isLive = merged.status === 'Live' && !merged.isSuspendedDueToInactivity && !merged.isRestrictedByAdmin;
+            if (isLive) {
+              registerLivePartnerDoctor(merged);
+            } else {
+              unregisterPartnerDoctor(p.id);
+            }
+          }
+          return merged;
+        }
+        return p;
+      });
       try {
         localStorage.setItem('nhealth_partners', JSON.stringify(updated));
       } catch {}
@@ -392,7 +450,9 @@ export default function App() {
           return {
             ...p,
             status: newStatus,
-            verifiedAt: isNowLive ? new Date().toISOString() : undefined,
+            isSuspendedDueToInactivity: newStatus === 'Suspended' ? true : false,
+            verifiedAt: isNowLive ? new Date().toISOString() : p.verifiedAt,
+            lastActiveAt: isNowLive ? new Date().toISOString() : p.lastActiveAt,
           };
         }
         return p;
@@ -834,6 +894,7 @@ export default function App() {
         onNavigatePartnerOnboarding={() => navigateTo('partner-with-us', '/partner-with-us')}
         onNavigateAdmin={() => navigateTo('command-center', '/command-center')}
         partners={partners}
+        onUpdatePartner={handleUpdatePartner}
       />
     );
   }
@@ -852,6 +913,7 @@ export default function App() {
       <AdminDashboardPage
         partners={partners}
         onTogglePartnerStatus={handleTogglePartnerStatus}
+        onUpdatePartner={handleUpdatePartner}
         onNavigateHome={() => navigateTo('home', '/')}
         onNavigateOnboarding={() => navigateTo('partner-with-us', '/partner-with-us')}
       />

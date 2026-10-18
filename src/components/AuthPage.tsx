@@ -30,10 +30,18 @@ import {
   Layers,
   X,
   Activity,
-  Users
+  Users,
+  Ban,
+  RotateCcw
 } from 'lucide-react';
 import { DashboardRole } from '../types/dashboard';
-import { PartnerApplication, INITIAL_PARTNERS } from '../types/partner';
+import {
+  PartnerApplication,
+  INITIAL_PARTNERS,
+  isPartnerSuspended,
+  calculateDaysInactive,
+  INACTIVITY_THRESHOLD_DAYS
+} from '../types/partner';
 import { UserAccount } from '../types/serviceBooking';
 
 interface AuthPageProps {
@@ -43,6 +51,7 @@ interface AuthPageProps {
   partners?: PartnerApplication[];
   onNavigatePartnerOnboarding?: () => void;
   onNavigateAdmin?: () => void;
+  onUpdatePartner?: (partnerId: string, updates: Partial<PartnerApplication>) => void;
 }
 
 // Unified Single Identity schema in localStorage
@@ -68,7 +77,7 @@ export interface ServiceAccountOption {
   entityName: string;
   phone: string;
   email: string;
-  status: 'Live' | 'Pending' | 'Active';
+  status: 'Live' | 'Pending' | 'Active' | 'Suspended';
   badge: string;
   specialty?: string;
   registrationNumber?: string;
@@ -83,6 +92,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   partners = INITIAL_PARTNERS,
   onNavigatePartnerOnboarding,
   onNavigateAdmin,
+  onUpdatePartner,
 }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'signup' | 'partner'>(defaultMode);
   const [loginMethod, setLoginMethod] = useState<'phone' | 'email'>('phone');
@@ -115,6 +125,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [partnerPassword, setPartnerPassword] = useState('');
   const [showPartnerPassword, setShowPartnerPassword] = useState(false);
   const [pendingPartnerNotice, setPendingPartnerNotice] = useState<PartnerApplication | null>(null);
+
+  // Phase 3: Inactive Account Suspension & Revocation Request State (Requirement 1)
+  const [suspendedPartnerNotice, setSuspendedPartnerNotice] = useState<PartnerApplication | null>(null);
+  const [showRevocationModal, setShowRevocationModal] = useState<boolean>(false);
+  const [revocationNote, setRevocationNote] = useState<string>('');
+  const [revocationSuccessToast, setRevocationSuccessToast] = useState<boolean>(false);
 
   // Multi-Account Selection Dropdown & Modal State (Phase 2 Requirement 2)
   const [showMultiAccountModal, setShowMultiAccountModal] = useState(false);
@@ -322,6 +338,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           (r) => r.id === p.id || (r.role === dashboardRole && r.entityName.toLowerCase() === p.entityName.toLowerCase())
         );
 
+        const isSuspended = isPartnerSuspended(p);
+        const daysInactive = calculateDaysInactive(p);
+        let partnerStatus: 'Live' | 'Pending' | 'Suspended' = 'Live';
+        let badge = 'Verified Partner';
+
+        if (isSuspended) {
+          partnerStatus = 'Suspended';
+          badge = `Suspended due to Inactivity (${daysInactive}d)`;
+        } else if (p.status === 'Pending') {
+          partnerStatus = 'Pending';
+          badge = 'Pending Admin Approval';
+        } else {
+          partnerStatus = 'Live';
+          badge = 'Verified Partner';
+        }
+
         if (!isAlreadyAdded) {
           results.push({
             id: p.id,
@@ -332,8 +364,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             entityName: p.entityName,
             phone: p.phone,
             email: p.email,
-            status: p.status === 'Pending' ? 'Pending' : 'Live',
-            badge: p.status === 'Pending' ? 'Pending Admin Approval' : 'Verified Partner',
+            status: partnerStatus,
+            badge,
             specialty: p.specialty || p.bioOrExperience,
             registrationNumber: p.registrationNumber,
             password: p.password || 'partner@2026',
@@ -363,6 +395,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     if (!selectedServiceAccount) return;
 
     setAccountPasswordError('');
+
+    // Phase 3: Block suspended partner accounts and direct to Revocation Request flow
+    if (selectedServiceAccount.status === 'Suspended') {
+      const allP = [...partners, ...INITIAL_PARTNERS];
+      const matched = allP.find((p) => p.id === selectedServiceAccount.id);
+      if (matched) {
+        setSuspendedPartnerNotice(matched);
+      }
+      setShowMultiAccountModal(false);
+      setErrorMsg(
+        `Account Suspended: "${selectedServiceAccount.entityName}" is flagged as Suspended due to Inactivity (>90 days rule). Please raise a Revocation Request below.`
+      );
+      return;
+    }
 
     if (selectedServiceAccount.status === 'Pending') {
       setAccountPasswordError(
@@ -425,6 +471,40 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setSuccessMsg(`Authenticated as ${selectedServiceAccount.roleTitle}! Seamlessly routing to your specialized dashboard...`);
       setTimeout(() => onSuccess(authenticatedUser), 400);
     }, 400);
+  };
+
+  // Phase 3 Requirement 1: Handle raising revocation / re-activation request
+  const handleRaiseRevocationRequest = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!suspendedPartnerNotice) return;
+
+    const note =
+      revocationNote.trim() ||
+      'Operations resumed. Medical licenses and service staff verified. Requesting account restoration on Nhealth network.';
+
+    if (onUpdatePartner) {
+      onUpdatePartner(suspendedPartnerNotice.id, {
+        revocationRequested: true,
+        revocationRequestedAt: new Date().toISOString(),
+        revocationReason: note,
+        revocationStatus: 'Pending Review',
+      });
+    }
+
+    const updated = {
+      ...suspendedPartnerNotice,
+      revocationRequested: true,
+      revocationRequestedAt: new Date().toISOString(),
+      revocationReason: note,
+      revocationStatus: 'Pending Review' as const,
+    };
+    setSuspendedPartnerNotice(updated);
+    setShowRevocationModal(false);
+    setRevocationSuccessToast(true);
+    setSuccessMsg(
+      `✓ Revocation Request Registered! Dispatched to support@nhealth.in & Admin Command Center review queue.`
+    );
+    setTimeout(() => setRevocationSuccessToast(false), 5000);
   };
 
   // 1-Click Quick Demo Login handler for Patients
@@ -549,6 +629,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         );
 
         if (matchedPartner) {
+          if (isPartnerSuspended(matchedPartner)) {
+            setSuspendedPartnerNotice(matchedPartner);
+            setErrorMsg(
+              `Account Suspended due to Inactivity: "${matchedPartner.entityName}" has been inactive for >90 days. Please raise a Revocation / Re-activation Request below.`
+            );
+            return;
+          }
+
           if (matchedPartner.status === 'Pending') {
             setPendingPartnerNotice(matchedPartner);
             setErrorMsg(`Partner Application Pending: The account for "${matchedPartner.entityName}" is under review. Credentials activate upon Admin approval.`);
@@ -878,6 +966,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
       if (!isPasswordValid) {
         setErrorMsg('Invalid password. Please check your credentials or reset password.');
+        return;
+      }
+
+      // Phase 3: Check if account is suspended (either >90 days inactive or admin restricted)
+      if (isPartnerSuspended(matchedPartner)) {
+        setSuspendedPartnerNotice(matchedPartner);
+        setErrorMsg(
+          `Account Suspended due to Inactivity: "${matchedPartner.entityName}" has remained inactive for >90 days. Please raise a Revocation / Re-activation Request below.`
+        );
         return;
       }
 
@@ -1260,6 +1357,73 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <div className="mb-4 p-3.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-medium flex items-start gap-2">
                   <Sparkles className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
                   <span>{singleIdentityNotice}</span>
+                </div>
+              )}
+
+              {/* Phase 3 Requirement 1: Suspended Partner Inactivity Notice & Revoke Action */}
+              {suspendedPartnerNotice && (
+                <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-rose-500/10 via-rose-50 to-amber-500/10 border-2 border-rose-400 text-rose-950 text-xs space-y-3 shadow-xs animate-in fade-in">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 font-black text-rose-900">
+                      <Ban className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="uppercase tracking-tight text-xs sm:text-sm">Account Suspended due to Inactivity</span>
+                    </div>
+                    <span className="text-[10px] font-mono bg-rose-200 text-rose-900 px-2 py-0.5 rounded-full font-bold">
+                      &gt;90-Day Rule
+                    </span>
+                  </div>
+
+                  <p className="leading-relaxed text-slate-800">
+                    The partner account for <strong>{suspendedPartnerNotice.entityName}</strong> (ID: {suspendedPartnerNotice.id}, Category: {suspendedPartnerNotice.category}) has been automatically flagged as <strong>"Suspended due to Inactivity"</strong> because it has remained without login or operational activity for over 3 months (90 days).
+                  </p>
+
+                  {suspendedPartnerNotice.lastActiveAt && (
+                    <div className="text-[11px] text-slate-600 bg-white/70 p-2 rounded-lg border border-rose-200 font-mono">
+                      Last operational activity recorded:{' '}
+                      <strong>{new Date(suspendedPartnerNotice.lastActiveAt).toLocaleDateString()}</strong> (
+                      {calculateDaysInactive(suspendedPartnerNotice)} days inactive)
+                    </div>
+                  )}
+
+                  {/* Revoke Request Action */}
+                  {suspendedPartnerNotice.revocationRequested ? (
+                    <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl space-y-1.5 text-emerald-900">
+                      <div className="flex items-center gap-2 font-bold text-xs">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Revocation / Re-activation Request Already Submitted</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 leading-tight">
+                        Your request has been routed directly to <strong className="font-mono">support@nhealth.in</strong> and entered the Admin review pipeline. The compliance officer will review within 24 hours.
+                      </p>
+                      {suspendedPartnerNotice.revocationReason && (
+                        <p className="text-[10px] text-slate-600 italic mt-1">
+                          Note: "{suspendedPartnerNotice.revocationReason}"
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRevocationNote('');
+                          setShowRevocationModal(true);
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black text-xs shadow-md transition-all active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Raise Revocation / Re-activation Request</span>
+                      </button>
+
+                      <a
+                        href={`mailto:support@nhealth.in?subject=Revocation%20%2F%20Re-activation%20Request%20-%20${encodeURIComponent(suspendedPartnerNotice.id)}&body=Partner%20Entity:%20${encodeURIComponent(suspendedPartnerNotice.entityName)}%0APartner%20ID:%20${suspendedPartnerNotice.id}%0APhone:%20${suspendedPartnerNotice.phone}%0A%0AReason%20for%20Reactivation:%20`}
+                        className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5"
+                      >
+                        <Mail className="w-3.5 h-3.5 text-[#008080]" />
+                        <span>Direct to support@nhealth.in</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1835,19 +1999,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           </h4>
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                              isPending
+                              acc.status === 'Suspended'
+                                ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                : acc.status === 'Pending'
                                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                 : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                             }`}
                           >
-                            {isPending ? '⏳ Pending Approval' : '✓ Live / Approved'}
+                            {acc.status === 'Suspended'
+                              ? '⛔ Suspended (>90d)'
+                              : acc.status === 'Pending'
+                              ? '⏳ Pending Approval'
+                              : '✓ Live / Approved'}
                           </span>
                         </div>
                         <p className="text-xs font-semibold text-slate-700 truncate mt-0.5">
                           {acc.entityName}
                         </p>
                         <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                          {acc.specialty || acc.registrationNumber || 'Nhealth Empaneled Account'}
+                          {acc.badge} • {acc.specialty || acc.registrationNumber || 'Nhealth Empaneled'}
                         </p>
                       </div>
 
@@ -1867,8 +2037,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 })}
               </div>
 
-              {/* Password Input or Pending Notice */}
-              {selectedServiceAccount?.status === 'Pending' ? (
+              {/* Password Input or Pending Notice or Suspended Inactivity Notice */}
+              {selectedServiceAccount?.status === 'Suspended' ? (
+                <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 text-xs space-y-2.5 animate-in fade-in">
+                  <div className="flex items-center gap-2 font-black text-rose-900">
+                    <Ban className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Suspended due to Inactivity (&gt;90 Days Rule)</span>
+                  </div>
+                  <p className="leading-relaxed text-[11px] text-slate-700">
+                    The partner account for <strong>{selectedServiceAccount.entityName}</strong> has remained inactive for over 90 days. Please raise a Revocation Request to restore operational credentials.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allP = [...partners, ...INITIAL_PARTNERS];
+                      const matched = allP.find((p) => p.id === selectedServiceAccount.id);
+                      if (matched) {
+                        setSuspendedPartnerNotice(matched);
+                      }
+                      setShowMultiAccountModal(false);
+                      setShowRevocationModal(true);
+                    }}
+                    className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Raise Revocation / Re-activation Request</span>
+                  </button>
+                </div>
+              ) : selectedServiceAccount?.status === 'Pending' ? (
                 <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
                   <div className="flex items-center gap-2 font-bold text-amber-900">
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1950,7 +2146,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isLoading || selectedServiceAccount?.status === 'Pending'}
+                  disabled={
+                    isLoading ||
+                    selectedServiceAccount?.status === 'Pending' ||
+                    selectedServiceAccount?.status === 'Suspended'
+                  }
                   className="flex-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#008080] to-[#009b9b] hover:from-[#006666] hover:to-[#008080] disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2"
                 >
                   {isLoading ? (
@@ -1961,6 +2161,87 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* REVOCATION / RE-ACTIVATION REQUEST MODAL (Phase 3 Requirement 1) */}
+      {/* ------------------------------------------------------------- */}
+      {showRevocationModal && suspendedPartnerNotice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => setShowRevocationModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-700 flex items-center justify-center font-bold">
+                  <RotateCcw className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h4 className="text-base font-extrabold text-[#002b49]">
+                    Raise Revocation / Re-activation Request
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    {suspendedPartnerNotice.entityName} ({suspendedPartnerNotice.id})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRevocationModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRaiseRevocationRequest} className="space-y-4">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed">
+                <strong>Direct Routing Protocol:</strong> This re-activation request routes directly to <strong>support@nhealth.in</strong> and is logged into the <strong>Admin Command Center (/command-center)</strong> review pipeline.
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Reason &amp; Operational Readiness for Re-activation <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="e.g. Pharmacy operations have resumed with new cold-chain drug storage and licensed pharmacist on duty. Requesting restoration to Live network."
+                  value={revocationNote}
+                  onChange={(e) => setRevocationNote(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#008080]"
+                />
+              </div>
+
+              <div className="text-[11px] text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+                <div>Contact Person: <strong>{suspendedPartnerNotice.contactPerson}</strong></div>
+                <div>Phone: <strong>{suspendedPartnerNotice.phone}</strong></div>
+                <div>Registered Email: <strong>{suspendedPartnerNotice.email}</strong></div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowRevocationModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#002b49] via-[#003859] to-[#008080] hover:from-[#00172b] hover:to-[#006666] text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Submit Revocation Request to Admin</span>
                 </button>
               </div>
             </form>
