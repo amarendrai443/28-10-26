@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { VitalLensUserData, VitalMetricsResult } from '../types/vitalLens';
 import { VPPGSignalProcessor } from '../utils/vppgEngine';
+import { generateVitalLensPDF } from '../utils/vitalReportGenerator';
 
 interface VitalLensModalProps {
   isOpen: boolean;
@@ -88,9 +89,15 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   const [liveBpm, setLiveBpm] = useState<number>(72);
   const [isFaceDetected, setIsFaceDetected] = useState(true);
 
-  // Step 5: Final Results
+  // Step 5: Final Results & PDF Report State
   const [scanResults, setScanResults] = useState<VitalMetricsResult | null>(null);
   const [activeResultsTab, setActiveResultsTab] = useState<'key_vitals' | 'heart_health' | 'mental_wellbeing' | 'physiological'>('key_vitals');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfDownloadSuccess, setPdfDownloadSuccess] = useState(false);
+
+  // Screen Wake Lock State & Sentinel
+  const [isWakeLockActive, setIsWakeLockActive] = useState(false);
+  const wakeLockSentinelRef = useRef<any>(null);
 
   // Video, Canvas and Audio / Animation Refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -103,10 +110,72 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   // Wave points for live vPPG display
   const wavePointsRef = useRef<number[]>([]);
 
+  // 1. Web Wake Lock API Helper: request screen wake lock
+  const requestScreenWakeLock = async () => {
+    if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+      try {
+        if (!wakeLockSentinelRef.current || wakeLockSentinelRef.current.released) {
+          const sentinel = await (navigator as any).wakeLock.request('screen');
+          wakeLockSentinelRef.current = sentinel;
+          setIsWakeLockActive(true);
+          sentinel.addEventListener('release', () => {
+            setIsWakeLockActive(false);
+            wakeLockSentinelRef.current = null;
+          });
+        }
+      } catch (err) {
+        console.warn('Screen Wake Lock request was not granted or error:', err);
+      }
+    }
+  };
+
+  // Web Wake Lock API Helper: release screen wake lock
+  const releaseScreenWakeLock = async () => {
+    if (wakeLockSentinelRef.current) {
+      try {
+        if (!wakeLockSentinelRef.current.released) {
+          await wakeLockSentinelRef.current.release();
+        }
+      } catch (err) {
+        console.warn('Screen Wake Lock release error:', err);
+      }
+      wakeLockSentinelRef.current = null;
+      setIsWakeLockActive(false);
+    }
+  };
+
+  // Screen Wake Lock Lifecycle:
+  // Activate wake lock when Vital Lens opens, keep awake while scan service is active, release on unmount / close
+  useEffect(() => {
+    if (isOpen) {
+      requestScreenWakeLock();
+    } else {
+      releaseScreenWakeLock();
+    }
+    return () => {
+      releaseScreenWakeLock();
+    };
+  }, [isOpen]);
+
+  // Handle visibility changes (document.visibilityState === 'visible') to re-acquire the lock if minimized/restored
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && isOpen && currentStep < 5) {
+        await requestScreenWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isOpen, currentStep]);
+
   // Reset or cleanup on open/close
   useEffect(() => {
     if (!isOpen) {
       stopCamera();
+      releaseScreenWakeLock();
       if (scanTimerRef.current) clearInterval(scanTimerRef.current);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       // Reset state for clean next usage
@@ -115,6 +184,8 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
       setScanSecondsElapsed(0);
       setScanResults(null);
       setCameraError(null);
+      setPdfDownloadSuccess(false);
+      setIsGeneratingPdf(false);
     }
   }, [isOpen]);
 
@@ -214,6 +285,8 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
       startScanningProcess();
     } catch (err: unknown) {
       console.error('Camera access error:', err);
+      // Automatically release the wake lock once scanning fails
+      releaseScreenWakeLock();
       setCameraError(
         'Unable to access your device camera. Please grant camera permission in your browser settings to proceed with the optical vitals scan.'
       );
@@ -480,15 +553,43 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
     ctx.shadowBlur = 0;
   };
 
-  // Scan finished -> Calculate metrics & move to Step 5
-  const finishScan = () => {
+  // Scan finished -> Release wake lock, calculate metrics, move to Step 5, and auto-download PDF report
+  const finishScan = async () => {
     stopCamera();
     if (scanTimerRef.current) clearInterval(scanTimerRef.current);
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
 
+    // Automatically release the wake lock once scanning completes
+    await releaseScreenWakeLock();
+
     const metrics = processorRef.current.calculateFinalMetrics(userData);
     setScanResults(metrics);
     setCurrentStep(5);
+
+    // Upon completion of the face scan, generate and trigger a downloadable PDF report
+    try {
+      setIsGeneratingPdf(true);
+      await generateVitalLensPDF(metrics, userData, true);
+      setPdfDownloadSuccess(true);
+    } catch (pdfErr) {
+      console.error('Auto PDF report generation error:', pdfErr);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  // Manual re-trigger for PDF Report download
+  const handleManualPdfDownload = async () => {
+    if (!scanResults) return;
+    try {
+      setIsGeneratingPdf(true);
+      await generateVitalLensPDF(scanResults, userData, true);
+      setPdfDownloadSuccess(true);
+    } catch (pdfErr) {
+      console.error('Manual PDF report generation error:', pdfErr);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   // Calculate scan progress %
@@ -1038,17 +1139,26 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
                   className="w-full h-full object-cover"
                 />
 
-                {/* Top overlay: Live Pulse & Timer */}
+                {/* Top overlay: Live Pulse, Wake Lock Status & Timer */}
                 <div className="absolute top-3 inset-x-3 flex items-center justify-between z-10 pointer-events-none">
                   <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-purple-500/40 text-xs font-black text-white">
                     <Heart className="w-3.5 h-3.5 text-rose-500 animate-ping" />
                     <span>{liveBpm} BPM</span>
                   </div>
 
-                  {/* Circular Timer & Countdown */}
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-teal-500/40 text-xs font-bold text-teal-300">
-                    <span>{SCAN_DURATION_SECONDS - scanSecondsElapsed}s left</span>
-                    <span className="text-[10px] text-slate-400 font-mono">({progressPercent}%)</span>
+                  <div className="flex items-center gap-2">
+                    {isWakeLockActive && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/70 backdrop-blur-md border border-emerald-400/40 text-[10px] font-bold text-emerald-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Screen Awake</span>
+                      </div>
+                    )}
+
+                    {/* Circular Timer & Countdown */}
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-teal-500/40 text-xs font-bold text-teal-300">
+                      <span>{SCAN_DURATION_SECONDS - scanSecondsElapsed}s left</span>
+                      <span className="text-[10px] text-slate-400 font-mono">({progressPercent}%)</span>
+                    </div>
                   </div>
                 </div>
 
@@ -1345,26 +1455,70 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
               </div>
             )}
 
+            {/* PDF Report Generation & Download Card */}
+            <div className="p-3.5 bg-gradient-to-r from-purple-950/40 via-[#00223f] to-teal-950/40 border border-purple-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0 border border-purple-400/20">
+                  <Download className="w-4 h-4 text-teal-400" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>NHealth Vital Lens™ PDF Report</span>
+                    {pdfDownloadSuccess && (
+                      <span className="text-[10px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full border border-teal-400/30 font-semibold">
+                        Downloaded
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Includes NHealth watermark, logo, clinical parameters, disclaimer &amp; patient instructions.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleManualPdfDownload}
+                disabled={isGeneratingPdf}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-teal-600 hover:from-purple-500 hover:to-teal-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md disabled:opacity-50 shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF Report'}</span>
+              </button>
+            </div>
+
             {/* Persistent Result Screen Mandatory Footer Disclaimer */}
             <div className="p-3 bg-purple-950/30 border border-purple-500/20 rounded-xl text-center text-xs text-slate-400">
-              Note: For informational &amp; wellness tracking purposes only. Consult a doctor for medical evaluation.
+              Disclaimer: This report is for general wellness reference only and does not replace professional medical advice. Consult a healthcare provider for clinical evaluation.
             </div>
 
             {/* Step 5 Action Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  if (onBookDoctor) {
-                    onClose();
-                    onBookDoctor('Doctor Home Visits');
-                  }
-                }}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-all cursor-pointer"
-              >
-                <Stethoscope className="w-3.5 h-3.5" />
-                <span>Consult Nhealth Doctor</span>
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onBookDoctor) {
+                      onClose();
+                      onBookDoctor('Doctor Home Visits');
+                    }
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Stethoscope className="w-3.5 h-3.5" />
+                  <span>Consult Nhealth Doctor</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleManualPdfDownload}
+                  disabled={isGeneratingPdf}
+                  className="inline-flex sm:hidden w-full items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>PDF Report</span>
+                </button>
+              </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
