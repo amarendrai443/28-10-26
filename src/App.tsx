@@ -58,6 +58,7 @@ import { AuthPage } from './components/AuthPage';
 import { PartnerOnboardingPage } from './components/PartnerOnboardingPage';
 import { AdminDashboardPage } from './components/AdminDashboardPage';
 import { CorporateEnquiriesPage } from './components/CorporateEnquiriesPage';
+import { TeamsPage } from './components/TeamsPage';
 import { RoleBasedDashboard } from './components/RoleBasedDashboard';
 import {
   PartnerApplication,
@@ -66,6 +67,12 @@ import {
   calculateDaysInactive,
   INACTIVITY_THRESHOLD_DAYS
 } from './types/partner';
+import {
+  EnquiryRecord,
+  getStoredEnquiries,
+  addEnquiry,
+  updateEnquiryStatus
+} from './types/enquiry';
 import { registerLivePartnerDoctor, unregisterPartnerDoctor } from './data/doctorsData';
 import { ServiceItem, BookingFormData, UserAccount, ConfirmedBooking } from './types/serviceBooking';
 import { EXTRACTED_SERVICES } from './data/servicesData';
@@ -311,9 +318,18 @@ const PARTNERS = [
   },
 ];
 
-type RoutePath = 'home' | 'auth' | 'partner-with-us' | 'command-center' | 'corporate-enquiries' | 'dashboard';
+type RoutePath =
+  | 'home'
+  | 'auth'
+  | 'partner-with-us'
+  | 'command-center'
+  | 'corporate-enquiries'
+  | 'dashboard'
+  | 'teams';
 
 function getRouteFromPath(pathname: string): RoutePath {
+  if (typeof window !== 'undefined' && window.location.hash === '#teams') return 'teams';
+  if (pathname === '/teams' || pathname.startsWith('/teams')) return 'teams';
   if (pathname === '/auth' || pathname.startsWith('/auth')) return 'auth';
   if (pathname === '/partner-with-us' || pathname.startsWith('/partner-with-us')) return 'partner-with-us';
   if (pathname === '/corporate-enquiries' || pathname.startsWith('/corporate-enquiries')) return 'corporate-enquiries';
@@ -329,16 +345,22 @@ function getRouteFromPath(pathname: string): RoutePath {
 }
 
 export default function App() {
-  // Dedicated Page Routing State (/auth, /partner-with-us, /command-center, /corporate-enquiries, /)
+  // Dedicated Page Routing State (/auth, /partner-with-us, /command-center, /corporate-enquiries, /teams, #teams, /)
   const [currentRoute, setCurrentRoute] = useState<RoutePath>(() => {
     if (typeof window !== 'undefined') {
+      if (window.location.hash === '#teams') return 'teams';
       return getRouteFromPath(window.location.pathname);
     }
     return 'home';
   });
 
   const navigateTo = (route: RoutePath, urlPath?: string) => {
-    const path = urlPath || (route === 'home' ? '/' : `/${route}`);
+    let path = urlPath;
+    if (!path) {
+      if (route === 'home') path = '/';
+      else if (route === 'teams') path = '#teams';
+      else path = `/${route}`;
+    }
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', path);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -348,10 +370,25 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentRoute(getRouteFromPath(window.location.pathname));
+      if (window.location.hash === '#teams') {
+        setCurrentRoute('teams');
+      } else {
+        setCurrentRoute(getRouteFromPath(window.location.pathname));
+      }
+    };
+    const handleHashChange = () => {
+      if (window.location.hash === '#teams') {
+        setCurrentRoute('teams');
+      } else if (window.location.pathname === '/' && window.location.hash !== '#teams') {
+        setCurrentRoute('home');
+      }
     };
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handleHashChange);
+    };
   }, []);
 
   // Partner Directory & Admin Approval State
@@ -391,6 +428,17 @@ export default function App() {
       return INITIAL_PARTNERS;
     }
   });
+
+  // Centralized Corporate & General Enquiries Store
+  const [enquiries, setEnquiries] = useState<EnquiryRecord[]>(getStoredEnquiries);
+
+  useEffect(() => {
+    const handleEnquiriesUpdated = () => {
+      setEnquiries(getStoredEnquiries());
+    };
+    window.addEventListener('nhealth_enquiries_updated', handleEnquiriesUpdated);
+    return () => window.removeEventListener('nhealth_enquiries_updated', handleEnquiriesUpdated);
+  }, []);
 
   // Keep empaneled live doctors in sync with live partners on mount
   useEffect(() => {
@@ -698,48 +746,35 @@ export default function App() {
     message?: string;
     refId: string;
   }) => {
-    // 1. Automatically trigger the form payload to support@nhealth.in
-    const emailSubject = encodeURIComponent(`[${type}] ${categoryOrService || 'Healthcare Service'} - ${name} (${refId})`);
-    const emailBody = encodeURIComponent(
-      `Hello Nhealth Support Team,\n\n` +
-      `A new inquiry has been submitted via the Nhealth Unified Healthcare portal:\n\n` +
-      `• Type: ${type}\n` +
-      `• Reference ID: ${refId}\n` +
-      `• Name / Contact: ${name}\n` +
-      `• Phone Number: ${phone}\n` +
-      `• Email: ${email || 'Not provided'}\n` +
-      `• Service / Category: ${categoryOrService || 'General Inquiry'}\n` +
-      `• Location / City: ${location || 'Not specified'}\n` +
-      `• Message / Details: ${message || 'No additional message'}\n\n` +
-      `Sent to: support@nhealth.in\n` +
-      `Nhealth Unified Healthcare Technologies Private Limited`
-    );
+    // Intercept form submission and store structured data payload into the central database store
+    const newEnquiry = addEnquiry({
+      id: refId,
+      type,
+      name,
+      phone,
+      email: email || '',
+      categoryOrService: categoryOrService || 'Healthcare Service',
+      location: location || '',
+      requirements: message || 'Inquiry regarding healthcare services.',
+      submittedAt: new Date().toISOString(),
+      status: 'Pending',
+      rawPayload: {
+        type,
+        name,
+        phone,
+        email,
+        categoryOrService,
+        location,
+        message,
+        source: 'MainPortalInquiry',
+      },
+    });
 
-    try {
-      const mailtoUrl = `mailto:support@nhealth.in?subject=${emailSubject}&body=${emailBody}`;
-      const hiddenIframe = document.createElement('iframe');
-      hiddenIframe.style.display = 'none';
-      hiddenIframe.src = mailtoUrl;
-      document.body.appendChild(hiddenIframe);
-      setTimeout(() => hiddenIframe.remove(), 2500);
-    } catch {
-      // Fallback
-    }
+    setEnquiries((prev) => [newEnquiry, ...prev]);
 
-    // 2. Open/redirect pre-filled details to WhatsApp number 9393932969 (https://wa.me/919393932969)
-    const waText = encodeURIComponent(
-      `*${type} [${refId}]*\n\n` +
-      `*Name / Org:* ${name}\n` +
-      `*Phone:* ${phone}\n` +
-      `*Email:* ${email || 'N/A'}\n` +
-      `*Service / Category:* ${categoryOrService || 'Healthcare Service'}\n` +
-      `*City / Location:* ${location || 'N/A'}\n` +
-      `*Message:* ${message || 'I would like to inquire about healthcare services.'}\n\n` +
-      `_Submitted to support@nhealth.in_`
-    );
-    window.open(`https://wa.me/919393932969?text=${waText}`, '_blank', 'noopener,noreferrer');
+    // Completely removed direct email (mailto) and WhatsApp window.open actions as requested.
 
-    // 3. Trigger a modal pop-up with the exact message
+    // Trigger modal pop-up with confirmation
     setEnquiryThankYouModalOpen(true);
   };
 
@@ -914,6 +949,11 @@ export default function App() {
         partners={partners}
         onTogglePartnerStatus={handleTogglePartnerStatus}
         onUpdatePartner={handleUpdatePartner}
+        enquiries={enquiries}
+        onUpdateEnquiryStatus={(id, status, notes) => {
+          const updated = updateEnquiryStatus(id, status, notes);
+          setEnquiries(updated);
+        }}
         onNavigateHome={() => navigateTo('home', '/')}
         onNavigateOnboarding={() => navigateTo('partner-with-us', '/partner-with-us')}
       />
@@ -925,6 +965,17 @@ export default function App() {
       <CorporateEnquiriesPage
         onNavigateHome={() => navigateTo('home', '/')}
         onNavigatePartner={() => navigateTo('partner-with-us', '/partner-with-us')}
+        onEnquirySubmitted={(newEnq) => setEnquiries((prev) => [newEnq, ...prev])}
+      />
+    );
+  }
+
+  if (currentRoute === 'teams') {
+    return (
+      <TeamsPage
+        onNavigateHome={() => navigateTo('home', '/')}
+        onNavigatePartner={() => navigateTo('partner-with-us', '/partner-with-us')}
+        onNavigateCorporate={() => navigateTo('corporate-enquiries', '/corporate-enquiries')}
       />
     );
   }
@@ -1121,6 +1172,16 @@ export default function App() {
               About Us
             </a>
             <a
+              href="#teams"
+              onClick={(e) => {
+                e.preventDefault();
+                navigateTo('teams', '#teams');
+              }}
+              className="hover:text-[#008080] transition-colors py-1.5 px-1.5 xl:px-2 rounded-lg whitespace-nowrap shrink-0"
+            >
+              Teams
+            </a>
+            <a
               href="/corporate-enquiries"
               onClick={(e) => {
                 e.preventDefault();
@@ -1266,6 +1327,16 @@ export default function App() {
               >
                 About Us
               </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigateTo('teams', '#teams');
+                }}
+                className="w-full text-left text-sm font-semibold text-slate-800 hover:text-[#008080] py-1.5 cursor-pointer"
+              >
+                Teams
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -3405,6 +3476,18 @@ export default function App() {
                 <li>
                   <a href="#about-us" className="hover:text-white transition-colors">
                     About Us
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#teams"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigateTo('teams', '#teams');
+                    }}
+                    className="hover:text-white transition-colors text-left cursor-pointer inline-block"
+                  >
+                    Teams
                   </a>
                 </li>
                 <li>

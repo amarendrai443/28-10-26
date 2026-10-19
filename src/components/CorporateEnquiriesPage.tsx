@@ -25,15 +25,18 @@ import {
   Zap,
   X
 } from 'lucide-react';
+import { addEnquiry, EnquiryRecord } from '../types/enquiry';
 
 interface CorporateEnquiriesPageProps {
   onNavigateHome: () => void;
   onNavigatePartner?: () => void;
+  onEnquirySubmitted?: (enquiry: EnquiryRecord) => void;
 }
 
 export const CorporateEnquiriesPage: React.FC<CorporateEnquiriesPageProps> = ({
   onNavigateHome,
   onNavigatePartner,
+  onEnquirySubmitted,
 }) => {
   // Form State
   const [formData, setFormData] = useState({
@@ -152,60 +155,37 @@ export const CorporateEnquiriesPage: React.FC<CorporateEnquiriesPageProps> = ({
     const refId = 'NH-CORP-' + Math.floor(100000 + Math.random() * 900000);
     setSubmittedRefId(refId);
 
-    // 1. Send structured enquiry payload directly to support@nhealth.in
-    const emailSubject = encodeURIComponent(
-      `[Corporate & Institutional Enquiry] ${formData.companyName} - ${formData.contactPerson} (${refId})`
-    );
-    const emailBody = encodeURIComponent(
-      `Dear Nhealth Enterprise Healthcare Team,\n\n` +
-        `A new corporate & institutional healthcare enquiry has been submitted via the B2B portal:\n\n` +
-        `===================================================\n` +
-        `ENTERPRISE ENQUIRY DETAILS (REF: ${refId})\n` +
-        `===================================================\n` +
-        `• Company / Institution Name: ${formData.companyName}\n` +
-        `• Contact Person Name: ${formData.contactPerson}\n` +
-        `• Designation: ${formData.designation}\n` +
-        `• Corporate Email ID: ${formData.corporateEmail}\n` +
-        `• Mobile Number: ${formData.mobileNumber}\n` +
-        `• Workforce / Employee Count: ${formData.employeeCount}\n` +
-        `• City / Location: ${formData.cityLocation}\n` +
-        `• Selected Enterprise Offerings:\n${formData.selectedOfferings.map((o) => `   - ${o}`).join('\n') || '   - Custom Enterprise Package'}\n\n` +
-        `• Requirement Description:\n${formData.requirementDescription || 'No additional comments provided'}\n\n` +
-        `===================================================\n` +
-        `Automated Submission to: support@nhealth.in\n` +
-        `Corporate Desk Hotline: +91 9393932969\n` +
-        `Nhealth Unified Healthcare Technologies Private Limited\n` +
-        `===================================================`
-    );
+    // Centralize submissions to Admin Dashboard store
+    const newEnquiry = addEnquiry({
+      id: refId,
+      type: 'Corporate Enquiry',
+      name: formData.contactPerson,
+      companyName: formData.companyName,
+      designation: formData.designation,
+      email: formData.corporateEmail,
+      phone: formData.mobileNumber,
+      employeeCount: formData.employeeCount,
+      location: formData.cityLocation,
+      categoryOrService: 'Corporate Health & Institutional Packages',
+      selectedOfferings: formData.selectedOfferings,
+      requirements:
+        formData.requirementDescription ||
+        `Offerings: ${formData.selectedOfferings.join(', ')}. Workforce: ${formData.employeeCount}`,
+      submittedAt: new Date().toISOString(),
+      status: 'Pending',
+      rawPayload: {
+        ...formData,
+        submittedVia: 'CorporateEnquiriesPage',
+      },
+    });
 
-    try {
-      const mailtoUrl = `mailto:support@nhealth.in?subject=${emailSubject}&body=${emailBody}`;
-      const hiddenIframe = document.createElement('iframe');
-      hiddenIframe.style.display = 'none';
-      hiddenIframe.src = mailtoUrl;
-      document.body.appendChild(hiddenIframe);
-      setTimeout(() => hiddenIframe.remove(), 2500);
-    } catch {
-      // Fallback
+    if (onEnquirySubmitted) {
+      onEnquirySubmitted(newEnquiry);
     }
 
-    // 2. Format and open WhatsApp message to 9393932969 (https://wa.me/919393932969)
-    const waText = encodeURIComponent(
-      `*CORPORATE & INSTITUTIONAL ENQUIRY [${refId}]*\n\n` +
-        `*Company:* ${formData.companyName}\n` +
-        `*Contact Person:* ${formData.contactPerson}\n` +
-        `*Designation:* ${formData.designation}\n` +
-        `*Corporate Email:* ${formData.corporateEmail}\n` +
-        `*Mobile:* ${formData.mobileNumber}\n` +
-        `*Workforce Count:* ${formData.employeeCount}\n` +
-        `*City / Location:* ${formData.cityLocation}\n\n` +
-        `*Selected Offerings:*\n${formData.selectedOfferings.map((o) => `• ${o}`).join('\n')}\n\n` +
-        `*Requirement:* ${formData.requirementDescription || 'Corporate health inquiry'}\n\n` +
-        `_Forwarded to support@nhealth.in & Enterprise Accounts Desk_`
-    );
-    window.open(`https://wa.me/919393932969?text=${waText}`, '_blank', 'noopener,noreferrer');
+    // Direct email to support@nhealth.in and WhatsApp links completely removed as requested.
 
-    // 3. Trigger the standard Nhealth Thank You pop-up modal
+    // Trigger the standard Nhealth Thank You pop-up modal
     setIsSubmitting(false);
     setShowThankYouModal(true);
   };

@@ -25,7 +25,17 @@ import {
   Mail,
   Building2,
   Activity,
-  CheckCheck
+  CheckCheck,
+  FileText,
+  Inbox,
+  User,
+  Calendar,
+  MapPin,
+  ExternalLink,
+  PhoneCall,
+  CheckCircle,
+  HelpCircle,
+  Filter
 } from 'lucide-react';
 import {
   PartnerApplication,
@@ -36,21 +46,31 @@ import {
   checkIsHighRiskMultiRegistration,
   INACTIVITY_THRESHOLD_DAYS
 } from '../types/partner';
+import {
+  EnquiryRecord,
+  EnquiryStatus,
+  getStoredEnquiries,
+  updateEnquiryStatus
+} from '../types/enquiry';
 
 interface AdminDashboardPageProps {
   partners: PartnerApplication[];
   onTogglePartnerStatus: (partnerId: string, newStatus: PartnerStatus) => void;
   onUpdatePartner?: (partnerId: string, updates: Partial<PartnerApplication>) => void;
+  enquiries?: EnquiryRecord[];
+  onUpdateEnquiryStatus?: (id: string, newStatus: EnquiryStatus, notes?: string) => void;
   onNavigateHome: () => void;
   onNavigateOnboarding: () => void;
 }
 
-type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk';
+type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries';
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   partners,
   onTogglePartnerStatus,
   onUpdatePartner,
+  enquiries,
+  onUpdateEnquiryStatus,
   onNavigateHome,
   onNavigateOnboarding,
 }) => {
@@ -80,6 +100,53 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   // Revocation Request Review Modal State
   const [reviewingRevocationPartner, setReviewingRevocationPartner] = useState<PartnerApplication | null>(null);
+
+  // Enquiries Centralized State & Synchronizer
+  const [localEnquiries, setLocalEnquiries] = useState<EnquiryRecord[]>(() => {
+    return enquiries && enquiries.length > 0 ? enquiries : getStoredEnquiries();
+  });
+  const [enquirySearchQuery, setEnquirySearchQuery] = useState('');
+  const [enquiryStatusFilter, setEnquiryStatusFilter] = useState<'All' | EnquiryStatus>('All');
+  const [enquiryTypeFilter, setEnquiryTypeFilter] = useState<string>('All');
+  const [inspectingEnquiry, setInspectingEnquiry] = useState<EnquiryRecord | null>(null);
+  const [adminNoteDraft, setAdminNoteDraft] = useState('');
+
+  // Keep synced with parent props
+  React.useEffect(() => {
+    if (enquiries) {
+      setLocalEnquiries(enquiries);
+    }
+  }, [enquiries]);
+
+  // Real-time synchronization across browser tabs and dispatch events
+  React.useEffect(() => {
+    const handleSync = () => {
+      setLocalEnquiries(getStoredEnquiries());
+    };
+    window.addEventListener('nhealth_enquiries_updated', handleSync);
+    return () => window.removeEventListener('nhealth_enquiries_updated', handleSync);
+  }, []);
+
+  const handleSetEnquiryStatus = (id: string, newStatus: EnquiryStatus, notes?: string) => {
+    if (onUpdateEnquiryStatus) {
+      onUpdateEnquiryStatus(id, newStatus, notes);
+    } else {
+      const updated = updateEnquiryStatus(id, newStatus, notes);
+      setLocalEnquiries(updated);
+    }
+    if (inspectingEnquiry && inspectingEnquiry.id === id) {
+      setInspectingEnquiry((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: newStatus,
+              adminNotes: notes !== undefined ? notes : prev.adminNotes,
+            }
+          : null
+      );
+    }
+    showToast(`Enquiry ${id} status updated to "${newStatus}".`);
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -274,6 +341,32 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     return risk.isHighRisk;
   });
   const highRiskCount = highRiskPartners.length;
+
+  // 5. Centralized Enquiries Metrics
+  const pendingEnquiriesCount = localEnquiries.filter((e) => e.status === 'Pending').length;
+  const reviewedEnquiriesCount = localEnquiries.filter((e) => e.status === 'Reviewed').length;
+  const contactedEnquiriesCount = localEnquiries.filter((e) => e.status === 'Contacted').length;
+  const resolvedEnquiriesCount = localEnquiries.filter((e) => e.status === 'Resolved').length;
+
+  // Filtered enquiries based on search, status filter, and type filter
+  const filteredEnquiries = localEnquiries.filter((e) => {
+    if (enquiryStatusFilter !== 'All' && e.status !== enquiryStatusFilter) return false;
+    if (enquiryTypeFilter !== 'All' && e.type !== enquiryTypeFilter) return false;
+    const q = enquirySearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      e.id.toLowerCase().includes(q) ||
+      e.name.toLowerCase().includes(q) ||
+      (e.companyName && e.companyName.toLowerCase().includes(q)) ||
+      (e.designation && e.designation.toLowerCase().includes(q)) ||
+      e.email.toLowerCase().includes(q) ||
+      e.phone.includes(q) ||
+      (e.location && e.location.toLowerCase().includes(q)) ||
+      (e.requirements && e.requirements.toLowerCase().includes(q)) ||
+      (e.categoryOrService && e.categoryOrService.toLowerCase().includes(q)) ||
+      (e.selectedOfferings && e.selectedOfferings.some((o) => o.toLowerCase().includes(q)))
+    );
+  });
 
   // Filtered partners list based on Search, Alignment Tab, and Vertical Category
   const filteredPartners = partners.filter((p) => {
@@ -515,7 +608,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         {/* ------------------------------------------------------------- */}
         {/* STATS GRID: Phase 3 Alignment (4 Primary Buckets) */}
         {/* ------------------------------------------------------------- */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* ------------------------------------------------------------- */}
+        {/* STATS GRID: Phase 3 Alignment & Centralized Enquiries Pipeline */}
+        {/* ------------------------------------------------------------- */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
           {/* Card 1: Pending Approvals */}
           <div
             onClick={() => setAlignmentTab('Pending')}
@@ -614,13 +710,43 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               Phone registered across 4+ service verticals
             </span>
           </div>
+
+          {/* Card 5: Review Enquiries (Corporate & General Pipeline) */}
+          <div
+            onClick={() => setAlignmentTab('Enquiries')}
+            className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md ${
+              alignmentTab === 'Enquiries'
+                ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/30'
+                : 'bg-white border-slate-200 hover:border-teal-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-teal-950 uppercase tracking-wider block">
+                Review Enquiries
+              </span>
+              <FileText className="w-4 h-4 text-teal-600" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl sm:text-3xl font-black text-teal-800">
+                {localEnquiries.length}
+              </span>
+              {pendingEnquiriesCount > 0 && (
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 animate-pulse">
+                  {pendingEnquiriesCount} Pending
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] text-teal-900 font-medium mt-0.5 block">
+              Corporate &amp; collaboration leads
+            </span>
+          </div>
         </div>
 
         {/* ------------------------------------------------------------- */}
-        {/* ALIGNMENT TABS & SEARCH BAR (Phase 3 Requirement 3) */}
+        {/* ALIGNMENT TABS & SEARCH BAR (Phase 3 & Review Enquiries) */}
         {/* ------------------------------------------------------------- */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3.5">
-          {/* Primary 4 Category Alignment Tabs */}
+          {/* Primary Queue Tabs */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider mr-1">
@@ -718,72 +844,456 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 }`}
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
-                <span>High-Risk Multi-Registered (4+ Services)</span>
+                <span>High-Risk (4+ Services)</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                   alignmentTab === 'HighRisk' ? 'bg-white/20 text-white' : 'bg-amber-300 text-amber-950 font-black'
                 }`}>
                   {highRiskCount}
                 </span>
               </button>
+
+              {/* Tab 5: Review Enquiries (Dedicated Tab) */}
+              <button
+                type="button"
+                onClick={() => setAlignmentTab('Enquiries')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                  alignmentTab === 'Enquiries'
+                    ? 'bg-gradient-to-r from-teal-700 to-[#002b49] text-white shadow-xs'
+                    : 'bg-teal-50 hover:bg-teal-100 text-teal-950 border border-teal-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Review Enquiries</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    alignmentTab === 'Enquiries'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-teal-200 text-teal-900'
+                  }`}
+                >
+                  {localEnquiries.length}
+                </span>
+                {pendingEnquiriesCount > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-300 text-amber-950 font-black animate-pulse">
+                    {pendingEnquiriesCount} New
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Quick Count Badge */}
             <div className="text-xs text-slate-500 font-medium">
-              Showing <strong>{filteredPartners.length}</strong> of {partners.length}
-            </div>
-          </div>
-
-          {/* Search & Category Filter Row */}
-          <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-            {/* Search Input */}
-            <div className="relative w-full md:w-96">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="text"
-                placeholder="Search by entity, phone, doctor, license, or city..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#008080] bg-slate-50/50"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
-                >
-                  ✕
-                </button>
+              {alignmentTab === 'Enquiries' ? (
+                <span>
+                  Showing <strong>{filteredEnquiries.length}</strong> of {localEnquiries.length} enquiries
+                </span>
+              ) : (
+                <span>
+                  Showing <strong>{filteredPartners.length}</strong> of {partners.length} accounts
+                </span>
               )}
             </div>
-
-            {/* Category Filter Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 text-xs">
-              <span className="text-slate-400 text-xs font-bold hidden sm:inline mr-1">Category:</span>
-              {['All', 'Doctor', 'Hospital', 'Diagnostics', 'Pharmacy', 'Ambulance', 'Care Assist', 'Blood Bank'].map((cat) => {
-                const isSelected = selectedCategory === cat;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-colors cursor-pointer text-xs ${
-                      isSelected
-                        ? 'bg-[#008080] text-white shadow-2xs'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                );
-              })}
-            </div>
           </div>
+
+          {/* Search & Filter Row */}
+          {alignmentTab === 'Enquiries' ? (
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
+              {/* Enquiry Search Input */}
+              <div className="relative w-full lg:w-96">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Search by company, person, email, phone, location, requirements..."
+                  value={enquirySearchQuery}
+                  onChange={(e) => setEnquirySearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#008080] bg-slate-50/50"
+                />
+                {enquirySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setEnquirySearchQuery('')}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter Chips for Enquiries */}
+              <div className="flex items-center gap-1.5 overflow-x-auto w-full lg:w-auto pb-1 text-xs">
+                <span className="text-slate-400 text-xs font-bold hidden sm:inline mr-1">Status:</span>
+                {(['All', 'Pending', 'Reviewed', 'Contacted', 'Resolved'] as const).map((st) => {
+                  const isSelected = enquiryStatusFilter === st;
+                  const count =
+                    st === 'All'
+                      ? localEnquiries.length
+                      : localEnquiries.filter((e) => e.status === st).length;
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setEnquiryStatusFilter(st)}
+                      className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-colors cursor-pointer text-xs flex items-center gap-1 ${
+                        isSelected
+                          ? 'bg-[#008080] text-white shadow-2xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      <span>{st}</span>
+                      <span className={`text-[10px] px-1 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+              {/* Search Input */}
+              <div className="relative w-full md:w-96">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Search by entity, phone, doctor, license, or city..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#008080] bg-slate-50/50"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 text-xs">
+                <span className="text-slate-400 text-xs font-bold hidden sm:inline mr-1">Category:</span>
+                {['All', 'Doctor', 'Hospital', 'Diagnostics', 'Pharmacy', 'Ambulance', 'Care Assist', 'Blood Bank'].map((cat) => {
+                  const isSelected = selectedCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-colors cursor-pointer text-xs ${
+                        isSelected
+                          ? 'bg-[#008080] text-white shadow-2xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ------------------------------------------------------------- */}
-        {/* PARTNERS APPLICATIONS TABLE / CARDS ROSTER */}
+        {/* REVIEW ENQUIRIES PIPELINE OR PARTNERS APPLICATIONS ROSTER */}
         {/* ------------------------------------------------------------- */}
-        <div className="space-y-4">
+        {alignmentTab === 'Enquiries' ? (
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
+            {/* Table Header Summary */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-[#002b49] flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-teal-600" />
+                  <span>Centralized Enquiries &amp; Collaboration Pipeline</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Direct intake from Corporate B2B forms, Healthcare Service Inquiries, and Partner Collaborations.
+                </p>
+              </div>
+
+              {/* Type Filter Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 font-bold">Type:</span>
+                <select
+                  value={enquiryTypeFilter}
+                  onChange={(e) => setEnquiryTypeFilter(e.target.value)}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500 text-slate-700 shadow-2xs"
+                >
+                  <option value="All">All Inquiry Types</option>
+                  <option value="Corporate Enquiry">Corporate Enquiry</option>
+                  <option value="Healthcare Service Inquiry">Healthcare Service Inquiry</option>
+                  <option value="Corporate & Institutional Collaboration">Corporate Collaboration</option>
+                  <option value="Talent & Team Application">Talent &amp; Teams</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Table Content or Empty State */}
+            {filteredEnquiries.length === 0 ? (
+              <div className="p-12 text-center">
+                <Inbox className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <h4 className="text-base font-bold text-slate-700">No enquiries found</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  No enquiries match the current filter selection ({enquiryStatusFilter} status). Try resetting filters.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnquirySearchQuery('');
+                    setEnquiryStatusFilter('All');
+                    setEnquiryTypeFilter('All');
+                  }}
+                  className="mt-4 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  Reset All Filters
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/90 border-b border-slate-200 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                      <th className="py-3 px-4">Date / Time</th>
+                      <th className="py-3 px-4">Company / User Name</th>
+                      <th className="py-3 px-4">Contact Info</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4 min-w-[260px]">Requirements</th>
+                      <th className="py-3 px-4 text-right">Status Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredEnquiries.map((enq) => {
+                      const isPending = enq.status === 'Pending';
+                      const isReviewed = enq.status === 'Reviewed';
+                      const isContacted = enq.status === 'Contacted';
+                      const isResolved = enq.status === 'Resolved';
+
+                      return (
+                        <tr
+                          key={enq.id}
+                          className="hover:bg-teal-50/20 transition-colors group"
+                        >
+                          {/* 1. Date */}
+                          <td className="py-4 px-4 align-top whitespace-nowrap">
+                            <div className="font-bold text-slate-900">
+                              {new Date(enq.submittedAt).toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                              {new Date(enq.submittedAt).toLocaleTimeString('en-IN', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true,
+                              })}
+                            </div>
+                            <span className="inline-block mt-1 font-mono text-[10px] text-teal-800 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200 font-bold">
+                              {enq.id}
+                            </span>
+                          </td>
+
+                          {/* 2. Company / User Name */}
+                          <td className="py-4 px-4 align-top">
+                            {enq.companyName ? (
+                              <div className="font-bold text-sm text-[#002b49] flex items-center gap-1.5">
+                                <Building2 className="w-4 h-4 text-teal-600 shrink-0" />
+                                <span>{enq.companyName}</span>
+                              </div>
+                            ) : null}
+                            <div className="text-xs text-slate-800 font-semibold flex items-center gap-1 mt-0.5">
+                              <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>{enq.name}</span>
+                              {enq.designation && (
+                                <span className="text-[11px] text-slate-500 font-normal">
+                                  ({enq.designation})
+                                </span>
+                              )}
+                            </div>
+                            {enq.employeeCount && (
+                              <div className="mt-1">
+                                <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                  Workforce: {enq.employeeCount}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 3. Contact Info */}
+                          <td className="py-4 px-4 align-top">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <a
+                                  href={`mailto:${enq.email}`}
+                                  className="text-teal-700 hover:text-teal-900 hover:underline break-all"
+                                >
+                                  {enq.email}
+                                </a>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <a
+                                  href={`tel:${enq.phone}`}
+                                  className="font-bold text-slate-800 hover:text-teal-700 font-mono"
+                                >
+                                  {enq.phone}
+                                </a>
+                              </div>
+                              {enq.location && (
+                                <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span className="truncate max-w-[180px]">{enq.location}</span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 4. Type */}
+                          <td className="py-4 px-4 align-top whitespace-nowrap">
+                            <span
+                              className={`inline-block px-2.5 py-1 rounded-full text-[10.5px] font-bold border ${
+                                enq.type === 'Corporate Enquiry'
+                                  ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                  : enq.type === 'Healthcare Service Inquiry'
+                                  ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                  : enq.type === 'Corporate & Institutional Collaboration'
+                                  ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                                  : 'bg-purple-50 text-purple-800 border-purple-200'
+                              }`}
+                            >
+                              {enq.type}
+                            </span>
+                            {enq.categoryOrService && (
+                              <div className="text-[10px] text-slate-500 font-medium mt-1">
+                                {enq.categoryOrService}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 5. Requirements */}
+                          <td className="py-4 px-4 align-top">
+                            <div className="space-y-1.5 max-w-sm">
+                              {enq.selectedOfferings && enq.selectedOfferings.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-1">
+                                  {enq.selectedOfferings.map((offering, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="text-[9.5px] font-semibold bg-teal-50 text-teal-900 border border-teal-200/80 px-1.5 py-0.2 rounded"
+                                    >
+                                      {offering}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              <p className="text-xs text-slate-700 leading-relaxed line-clamp-3">
+                                {enq.requirements}
+                              </p>
+
+                              {enq.adminNotes && (
+                                <div className="text-[11px] text-amber-900 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                                  <strong>Admin Note:</strong> {enq.adminNotes}
+                                </div>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInspectingEnquiry(enq);
+                                  setAdminNoteDraft(enq.adminNotes || '');
+                                }}
+                                className="text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-1 cursor-pointer pt-0.5"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>Inspect Full Payload &amp; Notes</span>
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* 6. Status Action */}
+                          <td className="py-4 px-4 align-top text-right whitespace-nowrap">
+                            <div className="flex flex-col items-end gap-1.5">
+                              {/* Status Badge */}
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border inline-flex items-center gap-1 ${
+                                  isPending
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                    : isReviewed
+                                    ? 'bg-sky-100 text-sky-900 border-sky-300'
+                                    : isContacted
+                                    ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                    : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                }`}
+                              >
+                                {isPending && <Clock className="w-3 h-3 text-amber-700" />}
+                                {isReviewed && <Eye className="w-3 h-3 text-sky-700" />}
+                                {isContacted && <PhoneCall className="w-3 h-3 text-blue-700" />}
+                                {isResolved && <CheckCircle2 className="w-3 h-3 text-emerald-700" />}
+                                <span>{enq.status}</span>
+                              </span>
+
+                              {/* Action Buttons: Mark as Reviewed, Contacted, Resolved */}
+                              <div className="flex items-center gap-1 pt-1">
+                                {!isReviewed && !isResolved && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetEnquiryStatus(enq.id, 'Reviewed')}
+                                    className="px-2 py-1 text-[10.5px] font-bold rounded-lg bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-200 transition-colors cursor-pointer"
+                                    title="Mark as Reviewed"
+                                  >
+                                    Reviewed
+                                  </button>
+                                )}
+
+                                {!isContacted && !isResolved && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetEnquiryStatus(enq.id, 'Contacted')}
+                                    className="px-2 py-1 text-[10.5px] font-bold rounded-lg bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200 transition-colors cursor-pointer"
+                                    title="Mark as Contacted"
+                                  >
+                                    Contacted
+                                  </button>
+                                )}
+
+                                {!isResolved && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetEnquiryStatus(enq.id, 'Resolved')}
+                                    className="px-2 py-1 text-[10.5px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors cursor-pointer shadow-2xs"
+                                    title="Mark as Resolved"
+                                  >
+                                    Resolve
+                                  </button>
+                                )}
+
+                                {isResolved && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetEnquiryStatus(enq.id, 'Pending')}
+                                    className="px-2 py-1 text-[10.5px] font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                                    title="Reopen Enquiry"
+                                  >
+                                    Reopen
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
           {filteredPartners.length === 0 ? (
             <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-2xs">
               <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -1102,7 +1612,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             })
           )}
         </div>
-      </main>
+      )}
+    </main>
 
       {/* ------------------------------------------------------------- */}
       {/* MULTI-REGISTRATION INSPECTION MODAL (Phase 3 Requirement 2) */}
@@ -1278,6 +1789,249 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 className="px-5 py-2 rounded-xl bg-[#002b49] text-white text-xs font-bold cursor-pointer"
               >
                 Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* INSPECT ENQUIRY FULL PAYLOAD & ADMIN NOTES MODAL */}
+      {/* ------------------------------------------------------------- */}
+      {inspectingEnquiry && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => setInspectingEnquiry(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-teal-500/30 relative max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base sm:text-lg font-bold text-[#002b49]">
+                      Enquiry Submission Record
+                    </h4>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">
+                      {inspectingEnquiry.id}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Submitted on{' '}
+                    {new Date(inspectingEnquiry.submittedAt).toLocaleString('en-IN', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingEnquiry(null)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Status Bar */}
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Current Status:
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    inspectingEnquiry.status === 'Pending'
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : inspectingEnquiry.status === 'Reviewed'
+                      ? 'bg-sky-100 text-sky-900 border-sky-300'
+                      : inspectingEnquiry.status === 'Contacted'
+                      ? 'bg-blue-100 text-blue-900 border-blue-300'
+                      : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                  }`}
+                >
+                  {inspectingEnquiry.status}
+                </span>
+              </div>
+
+              {/* Status Action Buttons */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSetEnquiryStatus(inspectingEnquiry.id, 'Reviewed')}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-200 transition-colors cursor-pointer"
+                >
+                  Mark Reviewed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetEnquiryStatus(inspectingEnquiry.id, 'Contacted')}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 transition-colors cursor-pointer"
+                >
+                  Mark Contacted
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetEnquiryStatus(inspectingEnquiry.id, 'Resolved')}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors cursor-pointer"
+                >
+                  Mark Resolved
+                </button>
+              </div>
+            </div>
+
+            {/* Structured Fields Grid */}
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Contact Person
+                  </span>
+                  <div className="font-bold text-slate-800 text-sm">{inspectingEnquiry.name}</div>
+                  {inspectingEnquiry.designation && (
+                    <div className="text-slate-500">{inspectingEnquiry.designation}</div>
+                  )}
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Company / Organization
+                  </span>
+                  <div className="font-bold text-[#002b49] text-sm">
+                    {inspectingEnquiry.companyName || 'Individual Healthcare Consumer'}
+                  </div>
+                  {inspectingEnquiry.employeeCount && (
+                    <div className="text-slate-500">Workforce: {inspectingEnquiry.employeeCount}</div>
+                  )}
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Direct Contact Channels
+                  </span>
+                  <div className="font-semibold text-slate-800">
+                    Phone:{' '}
+                    <a
+                      href={`tel:${inspectingEnquiry.phone}`}
+                      className="text-teal-700 hover:underline font-mono"
+                    >
+                      {inspectingEnquiry.phone}
+                    </a>
+                  </div>
+                  <div className="text-slate-600 mt-0.5">
+                    Email:{' '}
+                    <a
+                      href={`mailto:${inspectingEnquiry.email}`}
+                      className="text-teal-700 hover:underline"
+                    >
+                      {inspectingEnquiry.email}
+                    </a>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Location &amp; Type
+                  </span>
+                  <div className="font-semibold text-slate-800">
+                    Type: <span className="text-teal-800">{inspectingEnquiry.type}</span>
+                  </div>
+                  <div className="text-slate-600 mt-0.5">
+                    Location: {inspectingEnquiry.location || 'Not specified'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Selected Offerings (if any) */}
+              {inspectingEnquiry.selectedOfferings &&
+                inspectingEnquiry.selectedOfferings.length > 0 && (
+                  <div className="p-3.5 bg-teal-50/50 rounded-xl border border-teal-200/80">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 block mb-2">
+                      Selected Offerings &amp; Service Packages
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {inspectingEnquiry.selectedOfferings.map((pkg, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-1 rounded-md bg-white border border-teal-200 text-teal-900 font-semibold text-xs"
+                        >
+                          • {pkg}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Requirements Description */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                  Full Requirements &amp; Comments
+                </span>
+                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap text-xs sm:text-sm">
+                  {inspectingEnquiry.requirements}
+                </p>
+              </div>
+
+              {/* Internal Admin Notes */}
+              <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200 space-y-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 block">
+                  Internal Administrative Follow-up Notes
+                </span>
+                <textarea
+                  rows={2}
+                  value={adminNoteDraft}
+                  onChange={(e) => setAdminNoteDraft(e.target.value)}
+                  placeholder="Record follow-up details, phone call outcome, or account assignment notes here..."
+                  className="w-full p-2.5 rounded-lg border border-amber-300 bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs text-slate-800"
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSetEnquiryStatus(
+                        inspectingEnquiry.id,
+                        inspectingEnquiry.status,
+                        adminNoteDraft
+                      );
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                  >
+                    Save Internal Note
+                  </button>
+                </div>
+              </div>
+
+              {/* Raw Payload Collapsible / Inspection */}
+              {inspectingEnquiry.rawPayload && Object.keys(inspectingEnquiry.rawPayload).length > 0 && (
+                <div className="p-3 bg-slate-100 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Raw Submission Payload (All Submitted Form Fields)
+                  </span>
+                  <pre className="text-[11px] font-mono text-slate-700 overflow-x-auto p-2 bg-white rounded border border-slate-200 max-h-32">
+                    {JSON.stringify(inspectingEnquiry.rawPayload, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Centralized in Nhealth Admin Pipeline
+              </span>
+              <button
+                type="button"
+                onClick={() => setInspectingEnquiry(null)}
+                className="px-5 py-2 rounded-xl bg-[#002b49] hover:bg-[#001d31] text-white text-xs font-bold cursor-pointer transition-colors"
+              >
+                Close Details
               </button>
             </div>
           </div>
