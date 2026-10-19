@@ -563,6 +563,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
     await releaseScreenWakeLock();
 
     const metrics = processorRef.current.calculateFinalMetrics(userData);
+    metrics.scanTimestamp = new Date().toISOString();
     setScanResults(metrics);
     setCurrentStep(5);
 
@@ -1231,7 +1232,19 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
                   Vitals Dashboard for {userData.fullName}
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Scanned on {scanResults.scanTimestamp} · {userData.age} yrs · {userData.gender} · BMI {scanResults.bmi}
+                  Exact Test Timestamp:{' '}
+                  <span className="font-mono text-teal-300 font-semibold">
+                    {new Date(scanResults.scanTimestamp).toLocaleString('en-IN', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: true,
+                    })}
+                  </span>{' '}
+                  ({scanResults.scanTimestamp.slice(0, 19).replace('T', ' ')}) · {userData.age} yrs · {userData.gender} · BMI {scanResults.bmi}
                 </p>
               </div>
 

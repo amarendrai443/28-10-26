@@ -24,30 +24,90 @@ async function getBase64ImageFromUrl(url: string): Promise<string | null> {
 }
 
 /**
- * Renders a subtle, clean "NHealth" watermark diagonally across the background of every page.
+ * Formats a given timestamp into exact standard ISO date-time (YYYY-MM-DD HH:mm:ss)
+ * and localized date string.
  */
-function drawWatermark(doc: jsPDF) {
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.saveGraphicsState();
-    
-    // Very subtle, light-grey tint for clean watermark
-    doc.setTextColor(240, 244, 248);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(54);
-    
-    // Diagonal watermarks across page
-    doc.text('NHealth', 45, 110, { angle: 35 });
-    doc.text('NHealth', 85, 190, { angle: 35 });
-    doc.text('NHealth', 125, 270, { angle: 35 });
+function formatExactTestTimestamp(isoOrDateStr?: string): {
+  isoDateTime: string; // YYYY-MM-DD HH:mm:ss
+  localizedDate: string;
+  localizedTime: string;
+  fullLocale: string;
+} {
+  const date = isoOrDateStr ? new Date(isoOrDateStr) : new Date();
+  const validDate = isNaN(date.getTime()) ? new Date() : date;
 
-    doc.restoreGraphicsState();
-  }
+  const year = validDate.getFullYear();
+  const month = String(validDate.getMonth() + 1).padStart(2, '0');
+  const day = String(validDate.getDate()).padStart(2, '0');
+  const hours = String(validDate.getHours()).padStart(2, '0');
+  const minutes = String(validDate.getMinutes()).padStart(2, '0');
+  const seconds = String(validDate.getSeconds()).padStart(2, '0');
+
+  const isoDateTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+
+  const localizedDate = validDate.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  const localizedTime = validDate.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
+  const fullLocale = validDate.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
+  return { isoDateTime, localizedDate, localizedTime, fullLocale };
 }
 
 /**
- * Generates and triggers the downloadable Nhealth Vital Lens PDF Report
+ * Renders the subtle "NHealth" watermark on the BOTTOM canvas layer BEFORE rendering any cards,
+ * tables, headers, or text, with low opacity (0.08 - 0.12).
+ * All subsequent metric cards and tables are drawn on top with opaque solid fills,
+ * guaranteeing the watermark NEVER overlaps or obscures any numbers or text.
+ */
+function drawBottomLayerWatermark(doc: jsPDF) {
+  doc.saveGraphicsState();
+
+  try {
+    // Set opacity to 0.09 (strictly within 0.08 - 0.12 range)
+    const GStateClass = (doc as any).GState;
+    if (typeof GStateClass === 'function') {
+      doc.setGState(new GStateClass({ opacity: 0.09 }));
+    }
+  } catch (err) {
+    console.warn('GState opacity not available, using faint color tint:', err);
+  }
+
+  // Faint slate-blue color tint
+  doc.setTextColor(203, 213, 225);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(54);
+
+  // Diagonal watermark placement on bottom layer
+  doc.text('NHealth', 40, 105, { angle: 32 });
+  doc.text('NHealth', 80, 195, { angle: 32 });
+  doc.text('NHealth', 120, 275, { angle: 32 });
+
+  doc.restoreGraphicsState();
+}
+
+/**
+ * Generates and triggers the downloadable Nhealth Vital Lens PDF Report.
+ * Strict specifications:
+ * 1. Exact test timestamp (YYYY-MM-DD HH:mm:ss and Date.toLocaleString()).
+ * 2. Bottom canvas layer watermark with low opacity (0.08 - 0.12) that never obscures result text or numbers.
  */
 export async function generateVitalLensPDF(
   results: VitalMetricsResult,
@@ -65,6 +125,16 @@ export async function generateVitalLensPDF(
   const margin = 14;
   const contentWidth = pageWidth - margin * 2; // 182mm
 
+  // Compute exact test timestamp
+  const { isoDateTime, localizedDate, localizedTime, fullLocale } = formatExactTestTimestamp(results.scanTimestamp);
+
+  // =========================================================================
+  // REQUIREMENT 2: WATERMARK OVERLAP FIX
+  // Render "NHealth" watermark on the BOTTOM canvas layer FIRST before any text/tables
+  // with opacity ~0.09. All subsequent cards are drawn with solid fills on top.
+  // =========================================================================
+  drawBottomLayerWatermark(doc);
+
   // Fetch logo base64
   const logoBase64 = await getBase64ImageFromUrl(NHEALTH_LOGO_URL);
 
@@ -75,7 +145,7 @@ export async function generateVitalLensPDF(
   doc.rect(0, 5, pageWidth, 1.5, 'F');
 
   // 2. Header Section
-  let curY = 14;
+  let curY = 13.5;
   const logoSize = 18;
 
   if (logoBase64) {
@@ -104,17 +174,17 @@ export async function generateVitalLensPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(0, 43, 73); // Deep navy
-  doc.text('Nhealth Vital Lens™', titleX, curY + 6);
+  doc.text('Nhealth Vital Lens™', titleX, curY + 5.5);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(0, 128, 128); // Teal
-  doc.text('AI Contactless Biometric & Preventive Vitals Report', titleX, curY + 11);
+  doc.text('AI Contactless Biometric & Preventive Vitals Report', titleX, curY + 10.5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text('Optical Photoplethysmography (vPPG) & Hemodynamic Analytics', titleX, curY + 15.5);
+  doc.text(`Test Timestamp: ${isoDateTime} (${localizedTime})`, titleX, curY + 15);
 
   // Header Contact Information Box (Top-Right)
   const contactBoxWidth = 64;
@@ -135,49 +205,26 @@ export async function generateVitalLensPDF(
   doc.text('Email: support@nhealth.in', contactBoxX + 3, curY + 13.5);
   doc.text('Web: https://nhealth.in', contactBoxX + 3, curY + 17.5);
 
-  curY += 24;
+  curY += 23.5;
 
-  // 3. Patient Details & Metadata Bar
+  // 3. Patient Details & EXACT Test Timestamp Bar
+  // Fully opaque solid fill so background watermark never shows behind critical patient text
   doc.setFillColor(241, 245, 249);
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(margin, curY, contentWidth, 22, 2, 2, 'FD');
+  doc.roundedRect(margin, curY, contentWidth, 23, 2, 2, 'FD');
 
   const col1X = margin + 4;
-  const col2X = margin + 55;
-  const col3X = margin + 105;
-  const col4X = margin + 145;
+  const col2X = margin + 50;
+  const col3X = margin + 98;
+  const col4X = margin + 138;
 
-  const dateStr = results.scanTimestamp
-    ? new Date(results.scanTimestamp).toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      })
-    : new Date().toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
-
-  const timeStr = results.scanTimestamp
-    ? new Date(results.scanTimestamp).toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      })
-    : new Date().toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.2);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 116, 139);
   doc.text('PATIENT NAME', col1X, curY + 5);
   doc.text('CONTACT NO.', col2X, curY + 5);
   doc.text('DEMOGRAPHICS', col3X, curY + 5);
-  doc.text('EXAM DATE / TIME', col4X, curY + 5);
+  doc.text('EXACT TEST TIMESTAMP', col4X, curY + 5);
 
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
@@ -185,34 +232,39 @@ export async function generateVitalLensPDF(
   doc.text(userData.fullName || 'Guest Patient', col1X, curY + 10.5);
   doc.text(userData.mobileNumber || 'Not Provided', col2X, curY + 10.5);
   doc.text(`${userData.age} Yrs / ${userData.gender}`, col3X, curY + 10.5);
-  doc.text(`${dateStr} • ${timeStr}`, col4X, curY + 10.5);
+  
+  // EXACT TEST TIMESTAMP (YYYY-MM-DD HH:mm:ss)
+  doc.setFontSize(8.5);
+  doc.setTextColor(0, 43, 73);
+  doc.text(isoDateTime, col4X, curY + 10.5);
 
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.2);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(71, 85, 105);
-  doc.text(`PIN: ${userData.pincode || 'N/A'}`, col1X, curY + 16);
-  doc.text(`Height: ${userData.heightCm} cm • Weight: ${userData.weightKg} kg`, col2X, curY + 16);
-  doc.text(`BMI: ${results.bmi} (${results.bmiStatus})`, col3X, curY + 16);
-  doc.text('Status: Scan Verified (vPPG AI)', col4X, curY + 16);
+  doc.text(`PIN: ${userData.pincode || 'N/A'}`, col1X, curY + 16.5);
+  doc.text(`Height: ${userData.heightCm} cm • Weight: ${userData.weightKg} kg`, col2X, curY + 16.5);
+  doc.text(`BMI: ${results.bmi} (${results.bmiStatus})`, col3X, curY + 16.5);
+  doc.text(`Local: ${localizedDate} ${localizedTime}`, col4X, curY + 16.5);
 
-  curY += 27;
+  curY += 27.5;
 
   // Helper for Section Titles
   const drawSectionHeader = (title: string, yPos: number, accentColor: [number, number, number] = [0, 128, 128]) => {
     doc.setFillColor(...accentColor);
     doc.rect(margin, yPos, 3, 6, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
+    doc.setFontSize(10);
     doc.setTextColor(0, 43, 73);
     doc.text(title, margin + 5, yPos + 4.8);
-    
+
     // Thin horizontal rule
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.3);
     doc.line(margin + 5 + doc.getTextWidth(title) + 4, yPos + 3.5, pageWidth - margin, yPos + 3.5);
   };
 
-  // Helper for rendering 4-column metric cards
+  // Helper for rendering 4-column metric cards with solid opaque fill
+  // Solid fill guarantees all numbers and text remain 100% visible and readable
   const renderMetricCards = (
     yStart: number,
     cards: Array<{ label: string; value: string; subtext: string; highlight?: boolean }>
@@ -223,13 +275,13 @@ export async function generateVitalLensPDF(
 
     cards.forEach((card, index) => {
       const cardX = margin + index * (cardWidth + cardGap);
-      
-      // Card background
+
+      // Card background: Solid opaque fill
       if (card.highlight) {
-        doc.setFillColor(240, 253, 250); // Light teal
+        doc.setFillColor(240, 253, 250); // Light teal solid fill
         doc.setDrawColor(153, 246, 228);
       } else {
-        doc.setFillColor(248, 250, 252);
+        doc.setFillColor(248, 250, 252); // Off-white solid fill
         doc.setDrawColor(226, 232, 240);
       }
       doc.roundedRect(cardX, yStart, cardWidth, cardHeight, 1.8, 1.8, 'FD');
@@ -240,7 +292,7 @@ export async function generateVitalLensPDF(
       doc.setTextColor(100, 116, 139);
       doc.text(card.label.toUpperCase(), cardX + 3, yStart + 4.5);
 
-      // Metric value
+      // Metric value (100% crisp & unobstructed)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
       doc.setTextColor(card.highlight ? 13 : 15, card.highlight ? 148 : 23, card.highlight ? 136 : 42);
@@ -256,7 +308,7 @@ export async function generateVitalLensPDF(
     return yStart + cardHeight + 4;
   };
 
-  // SECTION 1: KEY VITAL PARAMETERS
+  // SECTION 1: KEY BIOMETRIC VITALS
   drawSectionHeader('1. KEY BIOMETRIC VITALS (FACIAL vPPG EXTRACTION)', curY);
   curY += 8;
 
@@ -371,8 +423,8 @@ export async function generateVitalLensPDF(
 
   curY += 2;
 
-  // 5. PATIENT INSTRUCTIONS BOX (Exactly as requested)
-  doc.setFillColor(240, 249, 255); // Light sky blue
+  // 5. PATIENT INSTRUCTIONS BOX (Opaque solid fill)
+  doc.setFillColor(240, 249, 255); // Light sky blue solid fill
   doc.setDrawColor(186, 230, 253);
   doc.roundedRect(margin, curY, contentWidth, 18, 2, 2, 'FD');
 
@@ -387,16 +439,16 @@ export async function generateVitalLensPDF(
   const patientInstructions = 'Rest well, maintain hydration, and track your vital trends regularly.';
   doc.text(patientInstructions, margin + 4, curY + 11.5);
 
-  curY += 22;
+  curY += 21.5;
 
-  // 6. IMPORTANT NOTE / DISCLAIMER BOX (Exactly as requested)
-  doc.setFillColor(254, 242, 242); // Light red/rose
+  // 6. IMPORTANT NOTE / DISCLAIMER BOX (Opaque solid fill)
+  doc.setFillColor(254, 242, 242); // Light red/rose solid fill
   doc.setDrawColor(254, 202, 202);
-  doc.roundedRect(margin, curY, contentWidth, 21, 2, 2, 'FD');
+  doc.roundedRect(margin, curY, contentWidth, 20, 2, 2, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.setTextColor(185, 28, 28); // Amber/Red
+  doc.setTextColor(185, 28, 28);
   doc.text('IMPORTANT NOTE & MEDICAL DISCLAIMER', margin + 4, curY + 5.5);
 
   doc.setFont('helvetica', 'normal');
@@ -404,35 +456,39 @@ export async function generateVitalLensPDF(
   doc.setTextColor(69, 10, 10);
   const disclaimerText =
     'Disclaimer: This report is for general wellness reference only and does not replace professional medical advice. Consult a healthcare provider for clinical evaluation.';
-  
+
   const splitDisclaimer = doc.splitTextToSize(disclaimerText, contentWidth - 8);
   doc.text(splitDisclaimer, margin + 4, curY + 11);
 
-  curY += 25;
-
-  // 7. FOOTER BAR WITH MANDATORY DETAILS (Repeated on page)
+  // 7. FOOTER BAR WITH EXACT TIMESTAMP & CONTACT DETAILS
   const footerY = 282;
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.4);
   doc.line(margin, footerY, pageWidth - margin, footerY);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.2);
   doc.setTextColor(100, 116, 139);
-  doc.text('Nhealth Unified Healthcare Network • Preventive Care & Telehealth Services', margin, footerY + 4.5);
-  doc.text('Phone: 9393934621  |  Email: support@nhealth.in  |  Website: www.nhealth.in', margin, footerY + 8.5);
+  doc.text(
+    `Test Date & Time: ${isoDateTime} (${fullLocale}) • Nhealth Unified Healthcare Network`,
+    margin,
+    footerY + 4.5
+  );
+  doc.text(
+    'Phone: 9393934621  |  Email: support@nhealth.in  |  Website: www.nhealth.in',
+    margin,
+    footerY + 8.5
+  );
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 128, 128);
   doc.text('Page 1 of 1', pageWidth - margin - 16, footerY + 6);
 
-  // 8. Draw background subtle watermark across every page
-  drawWatermark(doc);
-
-  // 9. Auto-trigger download if enabled
+  // 8. Auto-trigger download if enabled
   if (autoDownload) {
     const safeName = (userData.fullName || 'Patient').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename = `Nhealth_VitalLens_Report_${safeName}_${Date.now()}.pdf`;
+    const safeTime = isoDateTime.replace(/[: -]/g, '_');
+    const filename = `Nhealth_VitalLens_Report_${safeName}_${safeTime}.pdf`;
     doc.save(filename);
   }
 

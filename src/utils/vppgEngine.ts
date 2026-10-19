@@ -208,7 +208,7 @@ export class VPPGSignalProcessor {
       bodyWaterPercentage,
       totalBodyFatPercentage,
       bodyWeightKg: userData.weightKg,
-      scanTimestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      scanTimestamp: new Date().toISOString(),
     };
   }
 
