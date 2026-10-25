@@ -35,6 +35,23 @@ export interface PartnerApplication {
   loginIdOrEmail?: string;
   password?: string;
 
+  // Standard Profile & Verification Fields (All Departments)
+  whatsappNumber?: string;
+  fullAddress?: string;
+  govtIdProofName?: string;
+  profilePhotoName?: string;
+  agreedToTerms?: boolean;
+
+  // Care Rider Specific Fields & Uploads
+  vehicleType?: '2-Wheeler' | '4-Wheeler';
+  vehicleRegNumber?: string;
+  drivingLicenseNumber?: string;
+  alternateContactDetails?: string;
+  drivingLicenseDocName?: string;
+  individualPhotoName?: string;
+  familyPhotoName?: string;
+  policeNocDocName?: string;
+
   // Phase 3: Inactivity & Automatic Suspension Rules
   lastActiveAt?: string; // ISO date string of last login or operational activity
   isSuspendedDueToInactivity?: boolean;

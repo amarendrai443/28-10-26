@@ -24,9 +24,9 @@ export const GuestWarningModal: React.FC<GuestWarningModalProps> = ({
       aria-modal="true"
       aria-labelledby="warning-modal-title"
       aria-describedby="warning-modal-desc"
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-[2000] flex flex-col items-center justify-start bg-black/65 p-4 pt-20 sm:pt-24 pb-8 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200"
     >
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-amber-200 relative animate-in zoom-in-95 duration-200 text-center overflow-hidden">
+      <div className="bg-white rounded-3xl max-w-md w-full max-h-[calc(100vh-6.5rem)] sm:max-h-[calc(100vh-7.5rem)] overflow-y-auto p-6 sm:p-7 shadow-2xl border border-amber-200 relative animate-in zoom-in-95 duration-200 text-center my-auto">
         {/* Subtle Ambient Top Accent Bar */}
         <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600" />
 

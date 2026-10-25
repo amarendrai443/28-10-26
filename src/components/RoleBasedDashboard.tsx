@@ -58,14 +58,14 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
   onSwitchRole,
   allPartners = INITIAL_PARTNERS,
 }) => {
-  // Normalize current role
+  // Normalize current role - Dynamically directs approved partners to their specific service portal
   const determineInitialRole = (): DashboardRole => {
     const rawRole = currentUser.role || currentUser.accountType || '';
     const lower = rawRole.toLowerCase();
     if (lower.includes('doctor')) return 'Doctor';
     if (lower.includes('diagnostic') || lower.includes('lab') || lower.includes('blood')) return 'Diagnostics';
     if (lower.includes('pharmacy')) return 'Pharmacy';
-    if (lower.includes('ambulance') || lower.includes('rider')) return 'Ambulance';
+    if (lower.includes('rider') || lower.includes('transit') || lower.includes('ambulance')) return 'Ambulance';
     if (lower.includes('caregiver') || lower.includes('care assist') || lower.includes('elder') || lower.includes('assist')) return 'Caregiver';
     if (lower.includes('hospital')) return 'Hospital';
     return 'Patient';
@@ -84,8 +84,23 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Generate linked accounts for this phone/email under Single Identity
+  // Generate linked accounts for this phone/email under Single Identity, dynamically injecting approved partner
   const linkedAccounts: LinkedAccount[] = [
+    ...(currentUser.accountType === 'Partner' || currentUser.role !== 'Patient'
+      ? [
+          {
+            id: currentUser.id || 'PARTNER-LIVE-001',
+            name: currentUser.name || 'Empaneled Partner',
+            role: determineInitialRole(),
+            roleTitle: `${currentUser.role || 'Partner'} Portal`,
+            entityName: currentUser.entityName || currentUser.name || 'Nhealth Empaneled Unit',
+            phone: currentUser.phone || '9393934621',
+            email: currentUser.email || 'partner@nhealth.in',
+            status: 'Live' as const,
+            badge: 'Verified Partner',
+          },
+        ]
+      : []),
     {
       id: currentUser.id || 'USR-88210',
       name: currentUser.name || 'Valued User',
@@ -239,16 +254,21 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
               title="Return to Public Healthcare Portal"
             >
               <img
-                src="https://i.ibb.co/6JR2bwmJ/whatsapp-profile-pic.jpg"
+                src="https://i.ibb.co/JW6HFRV0/Nhealth-logo-8cm-x-8cm-high-quality-1-1.png"
                 alt="Nhealth Logo"
                 className="h-9 w-auto object-contain rounded-lg border border-teal-500/30"
                 onError={(e) => {
-                  e.currentTarget.src = '/splash-logo.png';
+                  e.currentTarget.src = 'https://i.ibb.co/wZG4rNV3/Nhealth-logo-8cm-x-8cm-high-quality-1-1.png';
                 }}
               />
-              <span className="font-extrabold text-lg sm:text-xl tracking-tight text-white group-hover:text-teal-300 transition-colors hidden sm:inline">
-                Nhealth™
-              </span>
+              <div className="flex flex-col text-left">
+                <span className="font-extrabold text-base sm:text-lg tracking-tight text-white group-hover:text-teal-300 transition-colors leading-tight">
+                  Nhealth™
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium hidden sm:inline leading-none">
+                  Unified &amp; At-Home Healthcare Network
+                </span>
+              </div>
             </button>
             <span className="text-slate-600 hidden md:inline">|</span>
             <div className="hidden md:flex items-center gap-2">

@@ -81,10 +81,10 @@ function drawBottomLayerWatermark(doc: jsPDF) {
   doc.saveGraphicsState();
 
   try {
-    // Set opacity to 0.09 (strictly within 0.08 - 0.12 range)
+    // Set subtle opacity to 0.08 so watermark remains readable without obscuring underlying text or data
     const GStateClass = (doc as any).GState;
     if (typeof GStateClass === 'function') {
-      doc.setGState(new GStateClass({ opacity: 0.09 }));
+      doc.setGState(new GStateClass({ opacity: 0.08 }));
     }
   } catch (err) {
     console.warn('GState opacity not available, using faint color tint:', err);
@@ -96,9 +96,9 @@ function drawBottomLayerWatermark(doc: jsPDF) {
   doc.setFontSize(54);
 
   // Diagonal watermark placement on bottom layer
-  doc.text('NHealth', 40, 105, { angle: 32 });
-  doc.text('NHealth', 80, 195, { angle: 32 });
-  doc.text('NHealth', 120, 275, { angle: 32 });
+  doc.text('Nhealth', 40, 105, { angle: 32 });
+  doc.text('Nhealth', 80, 195, { angle: 32 });
+  doc.text('Nhealth', 120, 275, { angle: 32 });
 
   doc.restoreGraphicsState();
 }

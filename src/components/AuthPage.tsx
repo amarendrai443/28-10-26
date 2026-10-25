@@ -115,7 +115,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     gender: 'Male',
     city: 'Hyderabad',
     pincode: '',
-    agreeTerms: true,
+    agreeTerms: false,
   });
   const [signupOtpSent, setSignupOtpSent] = useState(false);
   const [signupOtp, setSignupOtp] = useState('');
@@ -850,7 +850,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
     if (!signupForm.agreeTerms) {
-      setErrorMsg('Please agree to the Nhealth Terms of Service.');
+      setErrorMsg('Please agree to the mandatory Terms & Conditions and Privacy Policy.');
       return;
     }
 
@@ -1067,17 +1067,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between selection:bg-[#008080]/15 selection:text-[#002b49]">
-      {/* Top Navigation Bar */}
-      <nav className="bg-white border-b border-slate-200/90 shadow-2xs sticky top-0 z-40">
-        <div className="w-full px-4 sm:px-8 lg:px-12 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      {/* Top Navigation Bar - Frozen/Sticky on mobile and tablet */}
+      <nav className="bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-xs sticky top-0 z-50">
+        <div className="w-full px-3 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center shrink-0">
             <button
               type="button"
               onClick={onNavigateHome}
-              className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-[#008080] p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label="Back to home"
+              className="inline-flex items-center justify-center w-10 h-10 rounded-xl text-slate-700 hover:text-[#008080] hover:bg-slate-100 active:bg-slate-200 transition-colors cursor-pointer shrink-0 border border-slate-200/60 sm:border-transparent"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to Healthcare Portal</span>
+              <ArrowLeft className="w-5 h-5" />
             </button>
           </div>
 
@@ -1085,28 +1085,32 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             onClick={onNavigateHome}
             role="button"
             tabIndex={0}
-            className="flex items-center gap-2 cursor-pointer group"
+            className="flex items-center gap-2 cursor-pointer group min-w-0"
           >
             <img
               src="https://i.ibb.co/6JR2bwmJ/whatsapp-profile-pic.jpg"
               alt="Nhealth Logo"
-              className="h-9 sm:h-10 w-auto object-contain rounded-lg border border-teal-500/30"
+              className="h-8 sm:h-10 w-auto object-contain rounded-lg border border-teal-500/30 shrink-0"
               onError={(e) => {
                 e.currentTarget.src = '/splash-logo.png';
               }}
             />
             <span
               style={{ fontFamily: "'Poppins', 'Montserrat', sans-serif", fontWeight: 600 }}
-              className="text-xl sm:text-2xl tracking-tight text-[#002b49] group-hover:text-[#008080] transition-colors"
+              className="text-lg sm:text-2xl tracking-tight text-[#002b49] group-hover:text-[#008080] transition-colors whitespace-nowrap"
             >
               Nhealth™
             </span>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-slate-500">
-            <span className="hidden sm:inline">Need assistance?</span>
-            <a href="tel:9393934621" className="font-bold text-[#008080] hover:underline">
-              9393934621
+          <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-slate-500 shrink-0">
+            <span className="hidden md:inline text-slate-400">Need assistance?</span>
+            <a
+              href="tel:9393934621"
+              className="inline-flex items-center gap-1 font-bold text-[#008080] hover:underline bg-teal-50 sm:bg-transparent px-2.5 py-1 sm:p-0 rounded-lg border border-teal-100/80 sm:border-transparent text-[11px] sm:text-xs"
+            >
+              <Phone className="w-3 h-3 md:hidden text-[#008080]" />
+              <span>9393934621</span>
             </a>
           </div>
         </div>
@@ -1493,25 +1497,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">
                           Registered Mobile Number <span className="text-red-500">*</span>
                         </label>
-                        <div className="flex gap-2">
-                          <div className="flex items-center px-3 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-600">
+                        <div className="flex gap-1.5 sm:gap-2 w-full min-w-0">
+                          <div className="flex items-center px-2.5 sm:px-3 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 shrink-0">
                             🇮🇳 +91
                           </div>
                           <input
                             type="tel"
                             maxLength={10}
-                            placeholder="Enter 10-digit number"
+                            placeholder="10-digit number"
                             value={loginPhone}
                             onChange={(e) => setLoginPhone(e.target.value.replace(/\D/g, ''))}
                             disabled={loginOtpSent}
-                            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#008080]"
+                            className="min-w-0 flex-1 px-3 sm:px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#008080]"
                           />
                           {!loginOtpSent && (
                             <button
                               type="button"
                               onClick={handleSendLoginOtp}
                               disabled={isLoading || loginPhone.length < 10}
-                              className="px-4 py-2.5 rounded-xl bg-[#008080] hover:bg-[#006666] text-white text-xs font-bold disabled:opacity-50 transition-all cursor-pointer"
+                              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-[#008080] hover:bg-[#006666] active:bg-[#005555] text-white text-xs font-bold disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-xs"
                             >
                               Get OTP
                             </button>
@@ -1733,30 +1737,35 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       </div>
                     )}
 
-                    <div className="flex items-start gap-2 pt-1">
+                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
                       <input
                         type="checkbox"
                         id="terms"
+                        required
                         checked={signupForm.agreeTerms}
                         onChange={(e) => setSignupForm({ ...signupForm, agreeTerms: e.target.checked })}
-                        className="mt-1 rounded text-[#008080] focus:ring-[#008080]"
+                        className="mt-0.5 w-4 h-4 rounded text-[#008080] focus:ring-[#008080] cursor-pointer"
                       />
-                      <label htmlFor="terms" className="text-[11px] text-slate-600 leading-tight">
-                        I agree to Nhealth's Patient Care Terms of Service &amp; Consent for single identity profile management across verified medical services.
+                      <label htmlFor="terms" className="text-xs text-slate-700 leading-snug cursor-pointer font-medium">
+                        I agree to the <span className="font-bold text-[#002b49]">Terms &amp; Conditions</span> and <span className="font-bold text-[#002b49]">Privacy Policy</span> of Nhealth Unified Healthcare Technologies Private Limited. <span className="text-red-500 font-bold">(Mandatory)</span>
                       </label>
                     </div>
 
                     <button
                       type="submit"
-                      disabled={isLoading}
-                      className="w-full py-3 rounded-xl bg-[#002b49] hover:bg-[#001d31] text-white font-bold text-sm shadow-md transition-all active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2"
+                      disabled={isLoading || !signupForm.agreeTerms}
+                      className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                        !signupForm.agreeTerms || isLoading
+                          ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed opacity-60 shadow-none'
+                          : 'bg-gradient-to-r from-[#002b49] via-[#003859] to-[#002b49] hover:from-[#00172b] hover:to-[#00172b] text-white shadow-md hover:shadow-lg ring-2 ring-[#008080]/30 active:scale-[0.99] cursor-pointer'
+                      }`}
                     >
                       <span>
                         {isLoading
                           ? 'Registering Single Identity...'
                           : signupOtpSent
-                          ? 'Verify OTP & Complete Unified Sign-Up'
-                          : 'Register with Single Identity'}
+                          ? 'Verify OTP & Submit Request'
+                          : 'Submit Request / Register Single Identity'}
                       </span>
                       <ArrowRight className="w-4 h-4" />
                     </button>

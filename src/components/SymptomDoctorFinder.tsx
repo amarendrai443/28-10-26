@@ -58,30 +58,92 @@ export const SymptomDoctorFinder: React.FC<SymptomDoctorFinderProps> = ({
 
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-detect location via Geolocation API ("Use Current Location")
+  // Auto-detect real-time location via Geolocation API ("Use Current Location")
   const handleUseCurrentLocation = () => {
-    setIsDetectingLocation(true);
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        () => {
-          setLocationText('Gachibowli, Hyderabad, Telangana');
-          setLocation({
-            city: 'Hyderabad',
-            state: 'Telangana',
-            pincode: '500081',
-            isAutoDetected: true,
-          });
-          setIsDetectingLocation(false);
-        },
-        () => {
-          setLocationText('Hyderabad, Telangana');
-          setIsDetectingLocation(false);
-        },
-        { timeout: 8000 }
-      );
-    } else {
-      setIsDetectingLocation(false);
+    if (!('geolocation' in navigator)) {
+      console.warn('Geolocation is not supported by your browser.');
+      return;
     }
+    setIsDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          // Attempt real-time reverse geocoding via BigDataCloud client API (fast, CORS-friendly, no API key needed)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const res = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const data = await res.json();
+            const detectedCity = data.city || data.locality || data.principalSubdivision || 'Hyderabad';
+            const detectedState = data.principalSubdivision || 'Telangana';
+            const detectedPincode = data.postcode || '';
+            const detectedLocality = data.locality || '';
+
+            const displayParts = [detectedLocality, detectedCity, detectedState].filter(Boolean);
+            const displayText = displayParts.join(', ') || `${detectedCity}, ${detectedState}`;
+
+            setLocationText(displayText);
+            setLocation({
+              city: detectedCity,
+              state: detectedState,
+              pincode: detectedPincode,
+              isAutoDetected: true,
+            });
+            setIsDetectingLocation(false);
+            return;
+          }
+        } catch {
+          // Fallback to OpenStreetMap reverse geocoding
+          try {
+            const osmRes = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+            );
+            if (osmRes.ok) {
+              const osmData = await osmRes.json();
+              const addr = osmData.address || {};
+              const detectedCity = addr.city || addr.town || addr.village || addr.county || 'Hyderabad';
+              const detectedState = addr.state || 'Telangana';
+              const detectedPincode = addr.postcode || '';
+              const detectedSub = addr.suburb || addr.neighbourhood || '';
+
+              const displayText = [detectedSub, detectedCity, detectedState].filter(Boolean).join(', ');
+              setLocationText(displayText);
+              setLocation({
+                city: detectedCity,
+                state: detectedState,
+                pincode: detectedPincode,
+                isAutoDetected: true,
+              });
+              setIsDetectingLocation(false);
+              return;
+            }
+          } catch {
+            // Coordinate fallback
+          }
+        }
+
+        // Coordinate fallback if reverse-geocoders are unreachable
+        setLocationText(`Location (${latitude.toFixed(2)}, ${longitude.toFixed(2)})`);
+        setLocation({
+          city: 'Hyderabad',
+          state: 'Telangana',
+          pincode: '500081',
+          isAutoDetected: true,
+        });
+        setIsDetectingLocation(false);
+      },
+      (error) => {
+        console.warn('Geolocation access error or denied:', error.message);
+        setIsDetectingLocation(false);
+      },
+      { timeout: 9000, enableHighAccuracy: true, maximumAge: 60000 }
+    );
   };
 
   const handleLocationInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,7 +222,10 @@ export const SymptomDoctorFinder: React.FC<SymptomDoctorFinderProps> = ({
           VIEW 1: SEARCH BAR & HIGH-VISIBILITY CORPORATE HIGHLIGHTING (DEFAULT VIEW)
           ========================================================================= */}
       {!isResultsViewActive ? (
-        <div className="relative rounded-3xl p-4 sm:p-7 md:p-9 bg-gradient-to-br from-[#00172b] via-[#002742] to-[#003859] text-white shadow-2xl border-2 border-teal-500/40 overflow-hidden">
+        <div
+          style={{ aspectRatio: '4 / 1', minHeight: 'auto' }}
+          className="relative rounded-3xl p-4 sm:p-6 md:p-8 bg-gradient-to-br from-[#00172b] via-[#002742] to-[#003859] text-white shadow-2xl border-2 border-teal-500/40 overflow-hidden aspect-[4/1] flex flex-col justify-between"
+        >
           {/* Ambient high-tech background glow & subtle grid pattern */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />

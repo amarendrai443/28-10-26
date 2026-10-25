@@ -29,6 +29,7 @@ import {
 import { VitalLensUserData, VitalMetricsResult } from '../types/vitalLens';
 import { VPPGSignalProcessor } from '../utils/vppgEngine';
 import { generateVitalLensPDF } from '../utils/vitalReportGenerator';
+import { saveVitalScan } from '../utils/patientStorage';
 
 interface VitalLensModalProps {
   isOpen: boolean;
@@ -82,6 +83,9 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Step 4: Camera & Scan State
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
+  const [showCameraPrompt, setShowCameraPrompt] = useState(false);
+  const [isSimulatedScan, setIsSimulatedScan] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [scanSecondsElapsed, setScanSecondsElapsed] = useState(0);
@@ -114,17 +118,21 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   const requestScreenWakeLock = async () => {
     if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
       try {
-        if (!wakeLockSentinelRef.current || wakeLockSentinelRef.current.released) {
-          const sentinel = await (navigator as any).wakeLock.request('screen');
-          wakeLockSentinelRef.current = sentinel;
+        if (wakeLockSentinelRef.current && !wakeLockSentinelRef.current.released) {
           setIsWakeLockActive(true);
-          sentinel.addEventListener('release', () => {
-            setIsWakeLockActive(false);
-            wakeLockSentinelRef.current = null;
-          });
+          return;
         }
+        wakeLockSentinelRef.current = null;
+        const sentinel = await (navigator as any).wakeLock.request('screen');
+        wakeLockSentinelRef.current = sentinel;
+        setIsWakeLockActive(true);
+        sentinel.addEventListener('release', () => {
+          setIsWakeLockActive(false);
+          wakeLockSentinelRef.current = null;
+        });
       } catch (err) {
         console.warn('Screen Wake Lock request was not granted or error:', err);
+        setIsWakeLockActive(false);
       }
     }
   };
@@ -145,22 +153,22 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   };
 
   // Screen Wake Lock Lifecycle:
-  // Activate wake lock when Vital Lens opens, keep awake while scan service is active, release on unmount / close
+  // Activate wake lock when Vital Lens opens or enters Step 4 (camera scanning), keep awake while scan is active, release on unmount / finish
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && currentStep === 4) {
       requestScreenWakeLock();
-    } else {
+    } else if (!isOpen || currentStep === 5) {
       releaseScreenWakeLock();
     }
     return () => {
       releaseScreenWakeLock();
     };
-  }, [isOpen]);
+  }, [isOpen, currentStep]);
 
-  // Handle visibility changes (document.visibilityState === 'visible') to re-acquire the lock if minimized/restored
+  // Handle visibility changes (document.visibilityState === 'visible') to re-acquire the lock if minimized/restored during scan
   useEffect(() => {
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && isOpen && currentStep < 5) {
+      if (document.visibilityState === 'visible' && isOpen && currentStep === 4) {
         await requestScreenWakeLock();
       }
     };
@@ -188,6 +196,45 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
       setIsGeneratingPdf(false);
     }
   }, [isOpen]);
+
+  // Handle Browser / Hardware Back Button & Escape key dismiss
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Push history state to intercept browser / hardware Back button
+    const historyKey = 'vitalScanModalOpen';
+    try {
+      window.history.pushState({ [historyKey]: true }, '', window.location.href);
+    } catch {}
+
+    let dismissedByHistory = false;
+
+    const handlePopState = () => {
+      dismissedByHistory = true;
+      onClose();
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
+
+      // If dismissed by UI action (backdrop tap, close button), revert the history state we pushed
+      if (!dismissedByHistory && window.history.state && window.history.state[historyKey]) {
+        try {
+          window.history.back();
+        } catch {}
+      }
+    };
+  }, [isOpen, onClose]);
 
   // Synchronize height and weight units
   const handleHeightUnitChange = (unit: 'cm' | 'ft_in') => {
@@ -258,12 +305,21 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   };
 
   // Camera Management
-  const startCamera = async () => {
+  const startCamera = async (mode: 'user' | 'environment' = cameraFacingMode) => {
     setCameraError(null);
+    setIsSimulatedScan(false);
+    // Explicitly re-initialize screen wake lock on camera start/retry
+    await requestScreenWakeLock();
     try {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+      if (!navigator?.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        throw new Error('Camera API is not supported or is restricted in this browser environment.');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'user',
+          facingMode: mode === 'environment' ? { ideal: 'environment' } : 'user',
           width: { ideal: 640 },
           height: { ideal: 480 },
           frameRate: { ideal: 30 },
@@ -274,7 +330,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
       setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.play().catch(() => {});
       }
 
       // Initialize vPPG processor
@@ -282,15 +338,52 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
       wavePointsRef.current = [];
       setScanSecondsElapsed(0);
       setLiveBpm(72);
-      startScanningProcess();
+      startScanningProcess(false);
     } catch (err: unknown) {
-      console.error('Camera access error:', err);
+      console.warn('Camera access unavailable or permission denied:', (err as Error)?.message || err);
       // Automatically release the wake lock once scanning fails
       releaseScreenWakeLock();
+      const isPermissionDenied =
+        (err as Error)?.name === 'NotAllowedError' ||
+        (err as Error)?.name === 'PermissionDeniedError' ||
+        String(err).toLowerCase().includes('permission') ||
+        String(err).toLowerCase().includes('not allowed');
+
       setCameraError(
-        'Unable to access your device camera. Please grant camera permission in your browser settings to proceed with the optical vitals scan.'
+        isPermissionDenied
+          ? 'Camera access permission was denied by your browser. Please allow camera permissions in your browser address bar settings, or proceed with the simulated optical vitals scan.'
+          : 'Unable to access your device camera. Please check your camera settings, or proceed with the simulated optical vitals scan.'
       );
     }
+  };
+
+  const handleSelectCameraAndStart = async (mode: 'user' | 'environment') => {
+    setCameraFacingMode(mode);
+    setShowCameraPrompt(false);
+    setCurrentStep(4);
+    await startCamera(mode);
+  };
+
+  const startSimulatedScan = async () => {
+    setCameraError(null);
+    setIsSimulatedScan(true);
+    setShowCameraPrompt(false);
+    setCurrentStep(4);
+    stopCamera();
+    await requestScreenWakeLock();
+
+    processorRef.current.reset();
+    wavePointsRef.current = [];
+    setScanSecondsElapsed(0);
+    setLiveBpm(72);
+    startScanningProcess(true);
+  };
+
+  const toggleCameraFacingMode = async () => {
+    if (isSimulatedScan) return;
+    const nextMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+    setCameraFacingMode(nextMode);
+    await startCamera(nextMode);
   };
 
   const stopCamera = () => {
@@ -304,7 +397,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   };
 
   // Step 4 Scanning and vPPG Extraction Loop
-  const startScanningProcess = () => {
+  const startScanningProcess = (isSimulated = false) => {
     // 1. Timer countdown for SCAN_DURATION_SECONDS (70s)
     let elapsed = 0;
     if (scanTimerRef.current) clearInterval(scanTimerRef.current);
@@ -339,8 +432,40 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
       }
     }, 1000);
 
-    // 2. Continuous frame extraction from video -> canvas
+    // 2. Continuous frame extraction from video -> canvas OR synthetic biometric simulation
     const processFrame = () => {
+      if (isSimulated) {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const cw = canvas.width;
+            const ch = canvas.height;
+            ctx.fillStyle = '#050c18';
+            ctx.fillRect(0, 0, cw, ch);
+
+            drawSimulatedBiometricFace(ctx, cw, ch, performance.now());
+            drawMediaPipeMeshOverlay(ctx, cw, ch);
+
+            const now = performance.now();
+            const targetBpm = userData.gender === 'Female' ? 74 : 70;
+            const hrHz = targetBpm / 60;
+            const angle = (now / 1000) * hrHz * 2 * Math.PI;
+            // Realistic photoplethysmogram wave with dicrotic notch
+            const pulseValue = Math.sin(angle) * 0.72 + Math.sin(angle * 2) * 0.22 - 0.08 * Math.cos(angle * 3);
+
+            processorRef.current.addFrame(132 + pulseValue * 14, 122 + pulseValue * 8, 108, now);
+            wavePointsRef.current.push(pulseValue);
+            if (wavePointsRef.current.length > 90) {
+              wavePointsRef.current.shift();
+            }
+            drawPPGWaveform();
+          }
+        }
+        animationFrameRef.current = requestAnimationFrame(processFrame);
+        return;
+      }
+
       if (!videoRef.current || !canvasRef.current || videoRef.current.readyState < 2) {
         animationFrameRef.current = requestAnimationFrame(processFrame);
         return;
@@ -407,6 +532,34 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
     };
 
     animationFrameRef.current = requestAnimationFrame(processFrame);
+  };
+
+  // Draw simulated biometric silhouette & vascular pulsation when camera is unavailable
+  const drawSimulatedBiometricFace = (ctx: CanvasRenderingContext2D, w: number, h: number, timeMs: number) => {
+    const cx = w * 0.5;
+    const cy = h * 0.46;
+    const rx = w * 0.24;
+    const ry = h * 0.33;
+
+    // Glowing face silhouette
+    const pulseFactor = 0.5 + 0.5 * Math.sin((timeMs / 1000) * (liveBpm / 60) * 2 * Math.PI);
+    const grad = ctx.createRadialGradient(cx, cy, rx * 0.2, cx, cy, rx * 1.2);
+    grad.addColorStop(0, `rgba(168, 85, 247, ${0.14 + 0.08 * pulseFactor})`);
+    grad.addColorStop(0.6, `rgba(13, 148, 136, ${0.1 + 0.05 * pulseFactor})`);
+    grad.addColorStop(1, 'rgba(0, 20, 36, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Vascular capillary zones (forehead & cheeks)
+    const capGrad = ctx.createRadialGradient(cx, cy - ry * 0.45, 5, cx, cy - ry * 0.45, rx * 0.5);
+    capGrad.addColorStop(0, `rgba(236, 72, 153, ${0.2 + 0.12 * pulseFactor})`);
+    capGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = capGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy - ry * 0.45, rx * 0.5, 0, 2 * Math.PI);
+    ctx.fill();
   };
 
   // Draw futuristic Google MediaPipe biometric Face Mesh on top of camera
@@ -565,6 +718,13 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
     const metrics = processorRef.current.calculateFinalMetrics(userData);
     metrics.scanTimestamp = new Date().toISOString();
     setScanResults(metrics);
+    // Ultra-light compact data persistence (<2 KB JSON text object)
+    const isGuest = !defaultUserData?.name;
+    const scanMode: 'Logged-in' | 'Guest' = isGuest ? 'Guest' : 'Logged-in';
+    const scanUserId = isGuest
+      ? `GUEST-${(userData.mobileNumber || Date.now().toString()).slice(-6)}`
+      : `USR-${(userData.mobileNumber || 'PATIENT').slice(-6)}`;
+    saveVitalScan(metrics, userData, scanMode, scanUserId);
     setCurrentStep(5);
 
     // Upon completion of the face scan, generate and trigger a downloadable PDF report
@@ -593,6 +753,30 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
     }
   };
 
+  // Re-initialization handler for 'Scan Again' button on Step 5
+  const handleScanAgain = async () => {
+    stopCamera();
+    if (scanTimerRef.current) clearInterval(scanTimerRef.current);
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+
+    // Reset scan metrics & states
+    setScanResults(null);
+    setScanSecondsElapsed(0);
+    setLiveBpm(72);
+    setCameraError(null);
+    setIsSimulatedScan(false);
+    setPdfDownloadSuccess(false);
+    setIsGeneratingPdf(false);
+    wavePointsRef.current = [];
+    processorRef.current.reset();
+
+    // Re-initialize and request Screen Wake Lock explicitly for the retry scan
+    await requestScreenWakeLock();
+
+    // Prompt user with Camera Selection Modal before launching camera scan
+    setShowCameraPrompt(true);
+  };
+
   // Calculate scan progress %
   const progressPercent = Math.min(100, Math.round((scanSecondsElapsed / SCAN_DURATION_SECONDS) * 100));
 
@@ -603,9 +787,17 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="vital-lens-title"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 sm:p-5 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-[2000] flex flex-col items-center justify-start bg-black/80 p-3 sm:p-5 pt-20 sm:pt-24 pb-8 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200 cursor-pointer"
     >
-      <div className="bg-[#00172b] text-white rounded-3xl max-w-2xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-purple-500/30 relative overflow-hidden animate-in zoom-in-95 duration-200 my-auto">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#00172b] text-white rounded-3xl max-w-2xl w-full max-h-[calc(100vh-6.5rem)] sm:max-h-[calc(100vh-7.5rem)] flex flex-col shadow-2xl border border-purple-500/30 relative overflow-hidden animate-in zoom-in-95 duration-200 my-auto cursor-default"
+      >
         {/* Top Glowing Purple Brand Header Bar */}
         <div className="bg-gradient-to-r from-purple-900/90 via-[#002b49] to-[#008080] p-4 sm:p-5 border-b border-purple-500/30 relative shrink-0">
           <button
@@ -1075,8 +1267,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setCurrentStep(4);
-                  startCamera();
+                  setShowCameraPrompt(true);
                 }}
                 className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-teal-500 hover:brightness-110 text-white font-extrabold text-sm shadow-xl shadow-purple-950/50 transition-all cursor-pointer"
               >
@@ -1090,36 +1281,49 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
         {/* STEP 4: Live Camera Scan View (MediaPipe Face Mesh Integration) */}
         {currentStep === 4 && (
           <div className="p-4 sm:p-6 flex-1 flex flex-col items-center justify-between text-center overflow-y-auto">
-            {/* Prominent Nhealth Logo directly above camera viewport location */}
-            <div className="mb-2 flex items-center justify-center gap-2 bg-[#00223f] px-4 py-1.5 rounded-full border border-purple-500/30 shadow-sm">
-              <img
-                src={NHEALTH_LOGO_URL}
-                alt="Nhealth Logo"
-                className="h-6 w-auto object-contain"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (target.src !== window.location.origin + NHEALTH_LOGO_FALLBACK) {
-                    target.src = NHEALTH_LOGO_FALLBACK;
-                  }
-                }}
-              />
-              <span className="text-xs font-bold text-purple-300">
-                Nhealth Vital Lens™ Biometric Viewport
-              </span>
+            {/* Live VPPG Capillary Pulse Wave Monitor (Replaces removed redundant section above camera to keep camera screen 100% unobstructed) */}
+            <div className="w-full max-w-[420px] bg-[#00172b]/95 border border-purple-500/40 rounded-2xl p-2.5 mb-2 shadow-lg shrink-0">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 mb-1.5 px-1">
+                <span className="flex items-center gap-1.5 text-purple-300">
+                  <Activity className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                  <span>Live VPPG Capillary Pulse Wave</span>
+                </span>
+                <span className="text-teal-400 font-mono text-[10px] bg-teal-950/70 px-2 py-0.5 rounded-full border border-teal-500/30">
+                  {isSimulatedScan ? 'Clinical Synthetic vPPG' : '70 FPS Optical Filter'}
+                </span>
+              </div>
+              <div className="bg-black/60 rounded-xl p-1.5 border border-purple-500/20">
+                <canvas
+                  ref={waveCanvasRef}
+                  width={420}
+                  height={46}
+                  className="w-full h-11 block rounded-lg"
+                />
+              </div>
             </div>
 
             {cameraError ? (
-              <div className="p-6 my-auto bg-red-950/40 border border-red-500/50 rounded-2xl max-w-md space-y-3">
+              <div className="p-6 my-auto bg-red-950/40 border border-red-500/50 rounded-2xl max-w-md space-y-3.5 text-center">
                 <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
                 <h4 className="font-bold text-sm text-red-200">Camera Permission Required</h4>
                 <p className="text-xs text-slate-300 leading-relaxed">{cameraError}</p>
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold cursor-pointer"
-                >
-                  Retry Camera Access
-                </button>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => startCamera()}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    Retry Camera Access
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startSimulatedScan}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-teal-500 hover:brightness-110 text-white text-xs font-bold cursor-pointer transition-all shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Run Simulated Scan</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative w-full max-w-[420px] aspect-[4/3] rounded-3xl overflow-hidden border-2 border-purple-500/50 shadow-2xl bg-black my-1">
@@ -1132,7 +1336,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
                   className="hidden"
                 />
 
-                {/* Main Biometric Tracking Canvas */}
+                {/* Main Biometric Tracking Canvas - 100% Unobstructed */}
                 <canvas
                   ref={canvasRef}
                   width={480}
@@ -1162,23 +1366,6 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
                     </div>
                   </div>
                 </div>
-
-                {/* Bottom Overlay: Live vPPG Pulse Waveform Canvas */}
-                <div className="absolute bottom-2 inset-x-3 bg-black/70 backdrop-blur-md border border-white/10 rounded-2xl p-2 z-10">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
-                    <span className="flex items-center gap-1 text-purple-300">
-                      <Activity className="w-3 h-3 text-purple-400" />
-                      <span>Live vPPG Capillary Pulse Wave</span>
-                    </span>
-                    <span className="text-teal-400 font-mono">70 FPS Optical Filter</span>
-                  </div>
-                  <canvas
-                    ref={waveCanvasRef}
-                    width={380}
-                    height={46}
-                    className="w-full h-11 block rounded-lg"
-                  />
-                </div>
               </div>
             )}
 
@@ -1202,15 +1389,25 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
               </p>
             </div>
 
-            {/* Cancel Button */}
-            <div className="pt-2">
+            {/* Camera Actions: Switch Camera & Cancel Button */}
+            <div className="pt-2 flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={toggleCameraFacingMode}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400/40 text-purple-200 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                title="Switch between front and rear camera"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-purple-300" />
+                <span>Switch to {cameraFacingMode === 'user' ? 'Rear Camera' : 'Front Camera'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
                   stopCamera();
                   setCurrentStep(3);
                 }}
-                className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer py-1.5 px-3"
               >
                 Cancel Scan
               </button>
@@ -1536,10 +1733,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
                   type="button"
-                  onClick={() => {
-                    setCurrentStep(3);
-                    startCamera();
-                  }}
+                  onClick={handleScanAgain}
                   className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -1553,6 +1747,90 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
                   className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md"
                 >
                   Exit / Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CAMERA SELECTION MODAL PROMPT: Scan by Front Camera or Rear Camera */}
+        {showCameraPrompt && (
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowCameraPrompt(false);
+              }
+            }}
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in duration-200 cursor-pointer"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#00172b] text-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-purple-500/40 relative overflow-hidden text-center animate-in zoom-in-95 duration-200 cursor-default"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center mx-auto mb-4 border border-purple-400/30 shadow-inner">
+                <Camera className="w-7 h-7" />
+              </div>
+              <h3 className="text-xl font-black text-white tracking-tight">
+                Select Camera for Vital Scan
+              </h3>
+              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                Choose which camera you want to use for optical photoplethysmography (vPPG) face vitals analysis:
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-6">
+                <button
+                  type="button"
+                  onClick={() => handleSelectCameraAndStart('user')}
+                  className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gradient-to-br from-purple-900/60 to-purple-800/40 hover:from-purple-800/80 hover:to-purple-700/60 border-2 border-purple-400/50 hover:border-purple-300 text-white transition-all cursor-pointer group shadow-lg active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/30 group-hover:bg-purple-500/50 flex items-center justify-center mb-2.5 text-purple-200 shadow-xs">
+                    <User className="w-5 h-5" />
+                  </div>
+                  <span className="font-extrabold text-sm text-white">Scan by Front Camera</span>
+                  <span className="text-[10px] text-purple-200 mt-1 font-medium bg-purple-950/60 px-2 py-0.5 rounded-full border border-purple-400/30">
+                    Selfie / Self Scan
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectCameraAndStart('environment')}
+                  className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gradient-to-br from-teal-900/60 to-teal-800/40 hover:from-teal-800/80 hover:to-teal-700/60 border-2 border-teal-400/50 hover:border-teal-300 text-white transition-all cursor-pointer group shadow-lg active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-teal-500/30 group-hover:bg-teal-500/50 flex items-center justify-center mb-2.5 text-teal-200 shadow-xs">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                  <span className="font-extrabold text-sm text-white">Scan by Rear Camera</span>
+                  <span className="text-[10px] text-teal-200 mt-1 font-medium bg-teal-950/60 px-2 py-0.5 rounded-full border border-teal-400/30">
+                    Patient / Family Scan
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={startSimulatedScan}
+                  className="sm:col-span-2 flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-purple-950/50 to-teal-950/50 hover:from-purple-950 hover:to-teal-950 border border-purple-500/40 hover:border-purple-300 text-white transition-all cursor-pointer group shadow-sm active:scale-98 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0 border border-purple-400/30">
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-white block">Run Simulated Optical Scan</span>
+                      <span className="text-[10px] text-slate-400 block">No camera or browser permission required · Instant clinical simulation</span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-purple-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                </button>
+              </div>
+
+              <div className="mt-5 pt-3 border-t border-slate-800 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setShowCameraPrompt(false)}
+                  className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer py-1 px-4 rounded-lg hover:bg-white/5"
+                >
+                  Cancel
                 </button>
               </div>
             </div>
