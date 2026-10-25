@@ -20,7 +20,8 @@ import {
   X,
   Lock,
   Globe2,
-  Award
+  Award,
+  Menu
 } from 'lucide-react';
 import { addEnquiry } from '../types/enquiry';
 
@@ -43,6 +44,7 @@ export const TeamsPage: React.FC<TeamsPageProps> = ({
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [formSubmitted, setFormSubmitted] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [careerFormData, setCareerFormData] = useState({
     name: '',
     email: '',
@@ -181,77 +183,193 @@ export const TeamsPage: React.FC<TeamsPageProps> = ({
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-teal-500 selection:text-white">
       {/* Top Corporate Navigation Bar */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          {/* Logo & Brand Identity */}
-          <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
+          {/* Mobile & Tablet Header (ONLY Nhealth Logo & Name left-aligned, Hamburger Icon right-aligned) */}
+          <div className="flex lg:hidden items-center justify-between w-full">
             <button
               type="button"
               onClick={onNavigateHome}
-              className="flex items-center gap-3 group focus:outline-hidden text-left"
+              className="flex items-center gap-2.5 focus:outline-hidden text-left cursor-pointer"
               title="Return to Nhealth Home"
             >
-              <div className="h-12 w-12 rounded-xl bg-white border border-teal-500/20 shadow-xs flex items-center justify-center p-1 group-hover:border-teal-500 transition-all overflow-hidden">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-white border border-teal-500/20 shadow-xs flex items-center justify-center p-1 overflow-hidden">
                 <img
                   src={officialLogoUrl}
                   alt="Nhealth Logo"
                   className="h-full w-full object-contain"
                   onError={(e) => {
-                    // Fallback to secondary mirror if network blocks primary
-                    const target = e.currentTarget;
-                    if (target.src !== fallbackLogoUrl) {
-                      target.src = fallbackLogoUrl;
-                    }
+                    e.currentTarget.src = fallbackLogoUrl;
                   }}
                 />
               </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl sm:text-2xl font-black tracking-tight text-[#002b49] group-hover:text-[#008080] transition-colors">
-                    Nhealth
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200/80">
-                    Teams
-                  </span>
-                </div>
-                <span className="text-[11px] font-medium text-slate-500 tracking-normal hidden sm:block">
-                  Unified Healthcare Technologies
-                </span>
-              </div>
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-[#002b49]">
+                Nhealth<span className="text-[#008080]">™</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 rounded-xl text-slate-700 hover:text-[#008080] hover:bg-slate-100 transition-colors focus:outline-hidden cursor-pointer"
+              aria-label="Toggle navigation menu"
+            >
+              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
 
-          {/* Quick Header Actions */}
-          <div className="flex items-center gap-2 sm:gap-4">
-            <button
-              type="button"
-              onClick={onNavigateHome}
-              className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-[#008080] bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to Home</span>
-            </button>
-
-            {onNavigateCorporate && (
+          {/* Desktop Header (All direct navigation links & buttons) */}
+          <div className="hidden lg:flex items-center justify-between w-full">
+            {/* Logo & Brand Identity */}
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={onNavigateCorporate}
-                className="hidden md:inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-[#008080] rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
+                onClick={onNavigateHome}
+                className="flex items-center gap-3 group focus:outline-hidden text-left cursor-pointer"
+                title="Return to Nhealth Home"
               >
-                <Building2 className="w-4 h-4 text-teal-600" />
-                <span>Corporate Enquiries</span>
+                <div className="h-12 w-12 rounded-xl bg-white border border-teal-500/20 shadow-xs flex items-center justify-center p-1 group-hover:border-teal-500 transition-all overflow-hidden">
+                  <img
+                    src={officialLogoUrl}
+                    alt="Nhealth Logo"
+                    className="h-full w-full object-contain"
+                    onError={(e) => {
+                      e.currentTarget.src = fallbackLogoUrl;
+                    }}
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-black tracking-tight text-[#002b49] group-hover:text-[#008080] transition-colors">
+                      Nhealth
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200/80">
+                      Teams
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-medium text-slate-500 tracking-normal">
+                    Unified Healthcare Technologies
+                  </span>
+                </div>
               </button>
-            )}
+            </div>
 
-            <button
-              type="button"
-              onClick={() => setShowRoleModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 sm:px-5 py-2 text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-[#002b49] to-[#008080] hover:from-[#001d31] hover:to-[#006666] rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer"
-            >
-              <Briefcase className="w-4 h-4" />
-              <span>Join Our Team</span>
-            </button>
+            {/* Quick Header Actions */}
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={onNavigateHome}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-slate-700 hover:text-[#008080] bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Home</span>
+              </button>
+
+              {onNavigateCorporate && (
+                <button
+                  type="button"
+                  onClick={onNavigateCorporate}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-slate-700 hover:text-[#008080] rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
+                >
+                  <Building2 className="w-4 h-4 text-teal-600" />
+                  <span>Corporate Enquiries</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowRoleModal(true)}
+                className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white bg-gradient-to-r from-[#002b49] to-[#008080] hover:from-[#001d31] hover:to-[#006666] rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer"
+              >
+                <Briefcase className="w-4 h-4" />
+                <span>Join Our Team</span>
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Mobile & Tablet Hamburger Drawer Menu */}
+        {isMobileMenuOpen && (
+          <div className="lg:hidden border-t border-slate-200 bg-white/98 backdrop-blur-lg px-4 py-5 shadow-xl animate-in slide-in-from-top-2 duration-200">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1.5">
+                  <Users className="w-4 h-4" />
+                  Nhealth Team &amp; Careers
+                </span>
+                <span className="text-[11px] font-semibold text-slate-400">Talent Portal</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onNavigateHome();
+                }}
+                className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-[#008080] hover:bg-slate-50 transition-colors text-left cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4 text-teal-600 shrink-0" />
+                <span>Back to Patient Portal &amp; Home</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setShowRoleModal(true);
+                }}
+                className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#002b49] to-[#008080] text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+              >
+                <Briefcase className="w-4 h-4" />
+                <span>Join Our Team / Apply for Roles</span>
+              </button>
+
+              {onNavigateCorporate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onNavigateCorporate();
+                  }}
+                  className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors text-left cursor-pointer"
+                >
+                  <Building2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>Corporate &amp; Enterprise Solutions</span>
+                </button>
+              )}
+
+              {onNavigatePartner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onNavigatePartner();
+                  }}
+                  className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors text-left cursor-pointer"
+                >
+                  <Network className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>Doctor &amp; Partner Network</span>
+                </button>
+              )}
+
+              <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
+                <a
+                  href="tel:+919393932969"
+                  className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-[#008080]"
+                >
+                  <Phone className="w-4 h-4 text-[#008080]" />
+                  <span>Call Us: +91 9393932969</span>
+                </a>
+                <a
+                  href="mailto:careers@nhealth.in"
+                  className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-[#008080]"
+                >
+                  <Mail className="w-4 h-4 text-teal-600" />
+                  <span>Email: careers@nhealth.in</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main Content Area */}

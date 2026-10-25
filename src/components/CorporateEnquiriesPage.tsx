@@ -23,7 +23,8 @@ import {
   Check,
   Award,
   Zap,
-  X
+  X,
+  Menu
 } from 'lucide-react';
 import { addEnquiry, EnquiryRecord } from '../types/enquiry';
 
@@ -57,6 +58,7 @@ export const CorporateEnquiriesPage: React.FC<CorporateEnquiriesPageProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedRefId, setSubmittedRefId] = useState<string | null>(null);
   const [showThankYouModal, setShowThankYouModal] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const employeeOptions = [
     { id: '<100', label: '< 100 Employees', sub: 'Startups & Boutique Teams' },
@@ -194,98 +196,228 @@ export const CorporateEnquiriesPage: React.FC<CorporateEnquiriesPageProps> = ({
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-[#008080]/15 selection:text-[#002b49]">
       {/* Top Corporate Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3 sm:gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
+          {/* Mobile & Tablet Header (ONLY Nhealth Logo & Name left-aligned, Hamburger Icon right-aligned) */}
+          <div className="flex lg:hidden items-center justify-between w-full">
             <button
               type="button"
               onClick={onNavigateHome}
-              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-600 hover:text-[#008080] transition-colors p-1.5 -ml-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+              className="flex items-center gap-2.5 focus:outline-hidden text-left cursor-pointer"
+              title="Return to Nhealth Home"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Back to Patient Portal</span>
-              <span className="sm:hidden">Home</span>
-            </button>
-
-            <div className="h-6 w-px bg-slate-200 hidden sm:block" />
-
-            <div className="flex items-center gap-2">
+              <img
+                src="https://i.ibb.co/JW6HFRV0/Nhealth-logo-8cm-x-8cm-high-quality-1-1.png"
+                alt="Nhealth Logo"
+                className="w-8 h-8 sm:w-9 sm:h-9 object-contain"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://i.ibb.co/wZG4rNV3/Nhealth-logo-8cm-x-8cm-high-quality-1-1.png';
+                }}
+              />
               <span className="font-black text-xl sm:text-2xl text-[#002b49] tracking-tight">
                 Nhealth<span className="text-[#008080]">™</span>
               </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-teal-50 text-[#008080] border border-teal-200">
-                <Building2 className="w-3 h-3" />
-                Enterprise Health
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 sm:gap-4">
-            <a
-              href="tel:+919393932969"
-              className="hidden md:inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-[#008080] transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-50"
-            >
-              <Phone className="w-3.5 h-3.5 text-[#008080]" />
-              <span>+91 9393932969</span>
-            </a>
-
-            <a
-              href="mailto:support@nhealth.in"
-              className="hidden lg:inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800"
-            >
-              <Mail className="w-3.5 h-3.5 text-teal-600" />
-              <span>support@nhealth.in</span>
-            </a>
+            </button>
 
             <button
               type="button"
-              onClick={() => {
-                const formElem = document.getElementById('corporate-form-section');
-                formElem?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="bg-gradient-to-r from-[#008080] to-[#006666] hover:from-[#006666] hover:to-[#004d4d] text-white text-xs sm:text-sm font-bold px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 rounded-xl text-slate-700 hover:text-[#008080] hover:bg-slate-100 transition-colors focus:outline-hidden cursor-pointer"
+              aria-label="Toggle navigation menu"
             >
-              Request Corporate RFP
+              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
+
+          {/* Desktop Header (All direct navigation links & buttons) */}
+          <div className="hidden lg:flex items-center justify-between w-full">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={onNavigateHome}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-[#008080] transition-colors p-1.5 -ml-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Patient Portal</span>
+              </button>
+
+              <div className="h-6 w-px bg-slate-200" />
+
+              <div className="flex items-center gap-2">
+                <img
+                  src="https://i.ibb.co/JW6HFRV0/Nhealth-logo-8cm-x-8cm-high-quality-1-1.png"
+                  alt="Nhealth Logo"
+                  className="w-7 h-7 object-contain"
+                />
+                <span className="font-black text-2xl text-[#002b49] tracking-tight">
+                  Nhealth<span className="text-[#008080]">™</span>
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-teal-50 text-[#008080] border border-teal-200">
+                  <Building2 className="w-3 h-3" />
+                  Enterprise Health
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <a
+                href="tel:+919393932969"
+                className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-[#008080] transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-50"
+              >
+                <Phone className="w-3.5 h-3.5 text-[#008080]" />
+                <span>+91 9393932969</span>
+              </a>
+
+              <a
+                href="mailto:support@nhealth.in"
+                className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800"
+              >
+                <Mail className="w-3.5 h-3.5 text-teal-600" />
+                <span>support@nhealth.in</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const formElem = document.getElementById('corporate-form-section');
+                  formElem?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-gradient-to-r from-[#008080] to-[#006666] hover:from-[#006666] hover:to-[#004d4d] text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+              >
+                Request Corporate RFP
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* Mobile & Tablet Hamburger Drawer Menu */}
+        {isMobileMenuOpen && (
+          <div className="lg:hidden border-t border-slate-200 bg-white/98 backdrop-blur-lg px-4 py-5 shadow-xl animate-in slide-in-from-top-2 duration-200">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4" />
+                  Corporate Healthcare Solutions
+                </span>
+                <span className="text-[11px] font-semibold text-slate-400">Enterprise Portal</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onNavigateHome();
+                }}
+                className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-[#008080] hover:bg-slate-50 transition-colors text-left cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4 text-teal-600 shrink-0" />
+                <span>Back to Patient Portal &amp; Home</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  const formElem = document.getElementById('corporate-form-section');
+                  formElem?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#008080] to-[#006666] text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+              >
+                <span>Request Corporate RFP</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  const offerings = document.getElementById('enterprise-offerings');
+                  offerings?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors text-left cursor-pointer"
+              >
+                <Award className="w-4 h-4 text-teal-600 shrink-0" />
+                <span>Explore 4 Core Offerings</span>
+              </button>
+
+              {onNavigatePartner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onNavigatePartner();
+                  }}
+                  className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors text-left cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>Doctor &amp; Partner Network</span>
+                </button>
+              )}
+
+              <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
+                <a
+                  href="tel:+919393932969"
+                  className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-[#008080]"
+                >
+                  <Phone className="w-4 h-4 text-[#008080]" />
+                  <span>Call Us: +91 9393932969</span>
+                </a>
+                <a
+                  href="mailto:support@nhealth.in"
+                  className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-[#008080]"
+                >
+                  <Mail className="w-4 h-4 text-teal-600" />
+                  <span>Email: support@nhealth.in</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
-      {/* Hero Banner Section */}
-      <section className="relative bg-gradient-to-br from-[#00172b] via-[#002b49] to-[#00475b] text-white overflow-hidden py-16 sm:py-20 lg:py-24">
+      {/* Hero Banner Section with https://ibb.co/cXMcJ1Q4 Background & Strict 4:2 Mobile/Tablet Aspect Ratio */}
+      <section
+        style={{
+          backgroundImage: `linear-gradient(to right, rgba(0, 23, 43, 0.88), rgba(0, 43, 73, 0.8)), url('https://i.ibb.co/rfTGkmHD/Gemini-Generated-Image-mc5bvimc5bvimc5b.png'), url('https://ibb.co/cXMcJ1Q4')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+        className="corporate-hero-section relative text-white overflow-hidden w-full max-lg:aspect-[4/2] max-lg:w-full flex flex-col justify-center py-4 sm:py-8 lg:py-24"
+      >
         {/* Abstract Ambient Medical Pattern */}
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#00d2c4_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-teal-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-cyan-400/15 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="max-w-7xl mx-auto px-3 xs:px-4 sm:px-6 lg:px-8 relative z-10 w-full flex flex-col justify-center">
           <div className="max-w-3xl">
             {/* Enterprise Tag */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-teal-300/30 text-teal-300 text-xs font-bold uppercase tracking-wider backdrop-blur-md mb-6 shadow-xs">
-              <Building className="w-3.5 h-3.5" />
-              Corporate &amp; Institutional Healthcare Solutions
+            <div className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3.5 py-0.5 sm:py-1 rounded-full bg-white/10 border border-teal-300/30 text-teal-300 text-[8px] xs:text-[9.5px] sm:text-xs font-bold uppercase tracking-wider backdrop-blur-md mb-1.5 sm:mb-3 lg:mb-6 shadow-xs">
+              <Building className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" />
+              <span>Corporate &amp; Institutional Healthcare Solutions</span>
             </div>
 
             {/* Headline */}
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.12] mb-6">
+            <h1 className="text-xs xs:text-sm sm:text-2xl md:text-3xl lg:text-5xl font-black text-white tracking-tight leading-tight sm:leading-[1.12] mb-1 sm:mb-2 lg:mb-4">
               Elevating Enterprise Health &amp; Workforce Wellness
             </h1>
 
             {/* Sub-headline */}
-            <p className="text-base sm:text-lg md:text-xl text-slate-200 leading-relaxed font-normal mb-8">
+            <p className="text-[8.5px] xs:text-[10px] sm:text-xs md:text-sm lg:text-lg text-slate-200 leading-snug sm:leading-relaxed font-normal mb-2 sm:mb-3.5 lg:mb-6 line-clamp-2 md:line-clamp-none max-w-2xl">
               Tailored healthcare ecosystems for Indian enterprises, IT parks, and institutions—combining preventive wellness, onsite medical care, and complete family health coverage.
             </p>
 
             {/* Hero CTAs */}
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 lg:gap-4">
               <button
                 type="button"
                 onClick={() => {
                   document.getElementById('corporate-form-section')?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="bg-[#00d2c4] hover:bg-[#00bfa5] text-[#002b49] font-black px-6 py-3.5 rounded-xl text-sm sm:text-base transition-all shadow-lg shadow-teal-900/30 active:scale-95 cursor-pointer flex items-center gap-2"
+                className="bg-[#00d2c4] hover:bg-[#00bfa5] text-[#002b49] font-black px-2.5 py-1 sm:px-4 sm:py-2 lg:px-6 lg:py-3.5 rounded-lg sm:rounded-xl text-[9px] xs:text-[10px] sm:text-xs lg:text-base transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1 sm:gap-2"
               >
                 <span>Submit Enterprise Enquiry</span>
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
               </button>
 
               <button
@@ -293,30 +425,30 @@ export const CorporateEnquiriesPage: React.FC<CorporateEnquiriesPageProps> = ({
                 onClick={() => {
                   document.getElementById('enterprise-offerings')?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="border border-white/30 hover:bg-white/10 text-white font-semibold px-6 py-3.5 rounded-xl text-sm sm:text-base transition-all cursor-pointer backdrop-blur-xs"
+                className="border border-white/30 hover:bg-white/10 text-white font-semibold px-2.5 py-1 sm:px-4 sm:py-2 lg:px-6 lg:py-3.5 rounded-lg sm:rounded-xl text-[9px] xs:text-[10px] sm:text-xs lg:text-base transition-all cursor-pointer backdrop-blur-xs"
               >
-                Explore 4 Core Offerings
+                Explore Offerings
               </button>
             </div>
           </div>
 
           {/* Institutional Trust Indicators */}
-          <div className="mt-14 pt-10 border-t border-white/15 grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="space-y-1">
-              <div className="text-2xl sm:text-3xl font-black text-[#00d2c4]">450+</div>
-              <div className="text-xs sm:text-sm text-slate-300 font-medium">Corporate Campuses &amp; Parks</div>
+          <div className="mt-2 sm:mt-4 lg:mt-12 pt-2 sm:pt-4 lg:pt-8 border-t border-white/15 grid grid-cols-4 gap-1.5 sm:gap-4">
+            <div className="space-y-0 sm:space-y-1">
+              <div className="text-[11px] xs:text-xs sm:text-xl lg:text-3xl font-black text-[#00d2c4]">450+</div>
+              <div className="text-[7.5px] xs:text-[8.5px] sm:text-xs text-slate-300 font-medium truncate">Campuses &amp; Parks</div>
             </div>
-            <div className="space-y-1">
-              <div className="text-2xl sm:text-3xl font-black text-[#00d2c4]">50+ Cities</div>
-              <div className="text-xs sm:text-sm text-slate-300 font-medium">Pan-India Doorstep Coverage</div>
+            <div className="space-y-0 sm:space-y-1">
+              <div className="text-[11px] xs:text-xs sm:text-xl lg:text-3xl font-black text-[#00d2c4]">50+ Cities</div>
+              <div className="text-[7.5px] xs:text-[8.5px] sm:text-xs text-slate-300 font-medium truncate">Doorstep Coverage</div>
             </div>
-            <div className="space-y-1">
-              <div className="text-2xl sm:text-3xl font-black text-[#00d2c4]">99.4%</div>
-              <div className="text-xs sm:text-sm text-slate-300 font-medium">Onsite SLA &amp; Safety Compliance</div>
+            <div className="space-y-0 sm:space-y-1">
+              <div className="text-[11px] xs:text-xs sm:text-xl lg:text-3xl font-black text-[#00d2c4]">99.4%</div>
+              <div className="text-[7.5px] xs:text-[8.5px] sm:text-xs text-slate-300 font-medium truncate">SLA Compliance</div>
             </div>
-            <div className="space-y-1">
-              <div className="text-2xl sm:text-3xl font-black text-[#00d2c4]">&lt;15 Mins</div>
-              <div className="text-xs sm:text-sm text-slate-300 font-medium">Emergency Ambulance Protocol</div>
+            <div className="space-y-0 sm:space-y-1">
+              <div className="text-[11px] xs:text-xs sm:text-xl lg:text-3xl font-black text-[#00d2c4]">&lt;15 Mins</div>
+              <div className="text-[7.5px] xs:text-[8.5px] sm:text-xs text-slate-300 font-medium truncate">Ambulance SLA</div>
             </div>
           </div>
         </div>

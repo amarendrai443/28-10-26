@@ -1774,10 +1774,10 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
                 )}
               </div>
 
-              {/* Nhealth AI Symptom & Doctor Finder Section (Strict 4:2 Aspect Ratio on Mobile & Tablet Viewports) */}
+              {/* Nhealth AI Symptom & Doctor Finder Section */}
               <div
                 style={{ width: '100%' }}
-                className={`symptom-finder-frame relative overflow-hidden rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-5 lg:p-6 border flex flex-col justify-between max-lg:aspect-[4/2] max-lg:w-full max-lg:object-cover lg:aspect-auto lg:flex-row lg:items-center gap-2.5 sm:gap-4 shadow-sm w-full transition-all ${
+                className={`symptom-finder-frame relative overflow-hidden rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-5 lg:p-6 border flex flex-col justify-between sm:flex-row sm:items-center gap-3 sm:gap-4 shadow-sm w-full transition-all ${
                 isDark
                   ? 'bg-gradient-to-r from-purple-950/70 via-indigo-950/50 to-[#001c36] border-purple-500/40 text-white shadow-lg'
                   : 'bg-gradient-to-r from-purple-50 via-teal-50 to-blue-50 border-purple-200 text-slate-800'

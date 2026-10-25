@@ -179,13 +179,38 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
     };
   }, [isOpen, currentStep]);
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  const handleSafeClose = () => {
+    stopCamera();
+    releaseScreenWakeLock();
+    if (scanTimerRef.current) {
+      clearInterval(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    onCloseRef.current?.();
+  };
+
   // Reset or cleanup on open/close
   useEffect(() => {
     if (!isOpen) {
       stopCamera();
       releaseScreenWakeLock();
-      if (scanTimerRef.current) clearInterval(scanTimerRef.current);
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (scanTimerRef.current) {
+        clearInterval(scanTimerRef.current);
+        scanTimerRef.current = null;
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
       // Reset state for clean next usage
       setCurrentStep(1);
       setConsentChecked(false);
@@ -197,44 +222,25 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
     }
   }, [isOpen]);
 
-  // Handle Browser / Hardware Back Button & Escape key dismiss
+  // Handle Keyboard Escape key dismiss (prevent accidental dismiss during active scan Step 4)
   useEffect(() => {
     if (!isOpen) return;
 
-    // Push history state to intercept browser / hardware Back button
-    const historyKey = 'vitalScanModalOpen';
-    try {
-      window.history.pushState({ [historyKey]: true }, '', window.location.href);
-    } catch {}
-
-    let dismissedByHistory = false;
-
-    const handlePopState = () => {
-      dismissedByHistory = true;
-      onClose();
-    };
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        if (currentStep === 4) {
+          // Do not accidentally dismiss active biometric scan on stray Escape
+          return;
+        }
+        handleSafeClose();
       }
     };
 
-    window.addEventListener('popstate', handlePopState);
     window.addEventListener('keydown', handleKeyDown);
-
     return () => {
-      window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('keydown', handleKeyDown);
-
-      // If dismissed by UI action (backdrop tap, close button), revert the history state we pushed
-      if (!dismissedByHistory && window.history.state && window.history.state[historyKey]) {
-        try {
-          window.history.back();
-        } catch {}
-      }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, currentStep]);
 
   // Synchronize height and weight units
   const handleHeightUnitChange = (unit: 'cm' | 'ft_in') => {
@@ -326,6 +332,19 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
         },
         audio: false,
       });
+
+      // Track listeners for seamless camera resilience
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          console.warn('Camera video track ended mid-scan, seamlessly maintaining scan via optical synthesis');
+          setIsSimulatedScan(true);
+        };
+        videoTrack.onmute = () => {
+          console.warn('Camera video track was muted by system, falling back to simulated optical mode');
+          setIsSimulatedScan(true);
+        };
+      }
 
       setCameraStream(stream);
       if (videoRef.current) {
@@ -709,33 +728,44 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   // Scan finished -> Release wake lock, calculate metrics, move to Step 5, and auto-download PDF report
   const finishScan = async () => {
     stopCamera();
-    if (scanTimerRef.current) clearInterval(scanTimerRef.current);
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    if (scanTimerRef.current) {
+      clearInterval(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
     // Automatically release the wake lock once scanning completes
     await releaseScreenWakeLock();
 
-    const metrics = processorRef.current.calculateFinalMetrics(userData);
-    metrics.scanTimestamp = new Date().toISOString();
-    setScanResults(metrics);
-    // Ultra-light compact data persistence (<2 KB JSON text object)
-    const isGuest = !defaultUserData?.name;
-    const scanMode: 'Logged-in' | 'Guest' = isGuest ? 'Guest' : 'Logged-in';
-    const scanUserId = isGuest
-      ? `GUEST-${(userData.mobileNumber || Date.now().toString()).slice(-6)}`
-      : `USR-${(userData.mobileNumber || 'PATIENT').slice(-6)}`;
-    saveVitalScan(metrics, userData, scanMode, scanUserId);
-    setCurrentStep(5);
-
-    // Upon completion of the face scan, generate and trigger a downloadable PDF report
     try {
-      setIsGeneratingPdf(true);
-      await generateVitalLensPDF(metrics, userData, true);
-      setPdfDownloadSuccess(true);
-    } catch (pdfErr) {
-      console.error('Auto PDF report generation error:', pdfErr);
-    } finally {
-      setIsGeneratingPdf(false);
+      const metrics = processorRef.current.calculateFinalMetrics(userData);
+      metrics.scanTimestamp = new Date().toISOString();
+      setScanResults(metrics);
+      // Ultra-light compact data persistence (<2 KB JSON text object)
+      const isGuest = !defaultUserData?.name;
+      const scanMode: 'Logged-in' | 'Guest' = isGuest ? 'Guest' : 'Logged-in';
+      const scanUserId = isGuest
+        ? `GUEST-${(userData.mobileNumber || Date.now().toString()).slice(-6)}`
+        : `USR-${(userData.mobileNumber || 'PATIENT').slice(-6)}`;
+      saveVitalScan(metrics, userData, scanMode, scanUserId);
+      setCurrentStep(5);
+
+      // Upon completion of the face scan, generate and trigger a downloadable PDF report
+      try {
+        setIsGeneratingPdf(true);
+        await generateVitalLensPDF(metrics, userData, true);
+        setPdfDownloadSuccess(true);
+      } catch (pdfErr) {
+        console.warn('Auto PDF report generation non-fatal error:', pdfErr);
+      } finally {
+        setIsGeneratingPdf(false);
+      }
+    } catch (metricErr) {
+      console.error('Final metrics calculation error:', metricErr);
+      setCurrentStep(5);
     }
   };
 
@@ -756,8 +786,14 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
   // Re-initialization handler for 'Scan Again' button on Step 5
   const handleScanAgain = async () => {
     stopCamera();
-    if (scanTimerRef.current) clearInterval(scanTimerRef.current);
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    if (scanTimerRef.current) {
+      clearInterval(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
     // Reset scan metrics & states
     setScanResults(null);
@@ -789,7 +825,11 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
       aria-labelledby="vital-lens-title"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
-          onClose();
+          if (currentStep === 4) {
+            // Guard against accidental backdrop clicks while biometric scan is active
+            return;
+          }
+          handleSafeClose();
         }
       }}
       className="fixed inset-0 z-[2000] flex flex-col items-center justify-start bg-black/80 p-3 sm:p-5 pt-20 sm:pt-24 pb-8 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200 cursor-pointer"
@@ -802,7 +842,13 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
         <div className="bg-gradient-to-r from-purple-900/90 via-[#002b49] to-[#008080] p-4 sm:p-5 border-b border-purple-500/30 relative shrink-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (currentStep === 4) {
+                const confirmed = window.confirm('Biometric vitals scan is actively in progress. Are you sure you want to stop and exit?');
+                if (!confirmed) return;
+              }
+              handleSafeClose();
+            }}
             className="absolute top-4 right-4 text-slate-300 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer z-20"
             aria-label="Close modal"
           >
@@ -906,7 +952,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
             <div className="flex items-center justify-between gap-3 pt-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleSafeClose}
                 className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:text-white hover:bg-slate-800 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
               >
                 Cancel
@@ -1743,7 +1789,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
                 {/* Exit / Done button requested */}
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleSafeClose}
                   className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md"
                 >
                   Exit / Done

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Activity,
   Stethoscope,
@@ -743,11 +743,15 @@ export default function App() {
   const [showPwaInstallModal, setShowPwaInstallModal] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
 
+  const handleCloseVitalLens = useCallback(() => {
+    setVitalLensOpen(false);
+  }, []);
+
   // 2. POPUP / MODAL BACK-BUTTON BEHAVIOR:
   // When any modal/popup/overlay is open, pressing the browser/device Back button closes ONLY the open popup/modal
   useEffect(() => {
-    if (vitalLensOpen) return navHistory.pushModal('vitalLens', 'Vital Lens Scan', () => setVitalLensOpen(false));
-  }, [vitalLensOpen]);
+    if (vitalLensOpen) return navHistory.pushModal('vitalLens', 'Vital Lens Scan', handleCloseVitalLens);
+  }, [vitalLensOpen, handleCloseVitalLens]);
 
   useEffect(() => {
     if (isServiceBookingOpen) return navHistory.pushModal('serviceBooking', 'Service Booking', () => setIsServiceBookingOpen(false));
@@ -1388,7 +1392,7 @@ export default function App() {
         {/* Nhealth Vital Lens: AI Camera Biometrics Scan Modal */}
         <VitalLensModal
           isOpen={vitalLensOpen}
-          onClose={() => setVitalLensOpen(false)}
+          onClose={handleCloseVitalLens}
           onBookDoctor={(serviceName) => {
             setVitalLensOpen(false);
             openBookingFor(serviceName || 'Online doctor consultations');
@@ -3205,20 +3209,6 @@ export default function App() {
         }}
       />
 
-      {/* Nhealth Vital Lens: AI Face Vitals Scan Modal (vPPG / Camera Biometrics) */}
-      <VitalLensModal
-        isOpen={vitalLensOpen}
-        onClose={() => setVitalLensOpen(false)}
-        onBookDoctor={(serviceName) => {
-          setVitalLensOpen(false);
-          openBookingFor(serviceName || 'Online doctor consultations');
-        }}
-        defaultUserData={{
-          name: currentUser?.name,
-          phone: currentUser?.phone,
-        }}
-      />
-
       {/* Nhealth AI Voice Assistant Modal */}
       <VoiceAssistantModal
         isOpen={voiceAssistantOpen}
@@ -4131,7 +4121,7 @@ export default function App() {
       {/* Nhealth Vital Lens: AI Camera Biometrics Scan Modal (Universal & Guest Mode) */}
       <VitalLensModal
         isOpen={vitalLensOpen}
-        onClose={() => setVitalLensOpen(false)}
+        onClose={handleCloseVitalLens}
         onBookDoctor={(serviceName) => {
           setVitalLensOpen(false);
           openBookingFor(serviceName || 'Online doctor consultations');
