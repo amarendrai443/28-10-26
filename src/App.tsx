@@ -334,21 +334,81 @@ type RoutePath =
   | 'patient-dashboard'
   | 'teams';
 
-function getRouteFromPath(pathname: string): RoutePath {
-  if (typeof window !== 'undefined' && window.location.hash === '#teams') return 'teams';
-  if (pathname === '/teams' || pathname.startsWith('/teams')) return 'teams';
-  if (pathname === '/auth' || pathname.startsWith('/auth')) return 'auth';
-  if (pathname === '/patient-dashboard' || pathname.startsWith('/patient-dashboard')) return 'patient-dashboard';
-  if (pathname === '/partner-with-us' || pathname.startsWith('/partner-with-us')) return 'partner-with-us';
-  if (pathname === '/corporate-enquiries' || pathname.startsWith('/corporate-enquiries')) return 'corporate-enquiries';
-  if (pathname === '/command-center' || pathname.startsWith('/command-center')) return 'command-center';
-  if (pathname === '/dashboard' || pathname.startsWith('/dashboard')) return 'dashboard';
-  // Unauthorized legacy or misspelled admin paths seamlessly redirect to home
-  if (pathname === '/admin' || pathname === '/command-control') {
-    if (typeof window !== 'undefined') {
-      window.history.replaceState({}, '', '/');
-    }
+export const VALID_ROUTES: RoutePath[] = [
+  'home',
+  'auth',
+  'partner-with-us',
+  'command-center',
+  'corporate-enquiries',
+  'dashboard',
+  'patient-dashboard',
+  'teams',
+];
+
+export function normalizeRoute(raw: string | null | undefined): RoutePath | null {
+  if (!raw) return null;
+  const clean = raw.toLowerCase().trim().replace(/^#\/?/, '').replace(/^\/+/, '').split('?')[0].split('#')[0];
+  if (VALID_ROUTES.includes(clean as RoutePath)) {
+    return clean as RoutePath;
   }
+  if (clean === '' || clean === 'index.html') return 'home';
+  if (clean === 'admin' || clean === 'command-control') return 'home';
+  if (clean === 'patient' || clean === 'patient-portal') return 'patient-dashboard';
+  if (clean === 'partner' || clean === 'partners') return 'partner-with-us';
+  if (clean === 'enquiry' || clean === 'enquiries') return 'corporate-enquiries';
+  return null;
+}
+
+export function getRouteFromLocation(): RoutePath {
+  if (typeof window === 'undefined') return 'home';
+
+  // 1. Check window.location.hash (e.g. #/patient-dashboard, #patient-dashboard, #teams)
+  if (window.location.hash) {
+    const fromHash = normalizeRoute(window.location.hash);
+    if (fromHash) return fromHash;
+  }
+
+  // 2. Check window.location.pathname (e.g. /patient-dashboard, /teams)
+  if (window.location.pathname && window.location.pathname !== '/') {
+    const fromPath = normalizeRoute(window.location.pathname);
+    if (fromPath) return fromPath;
+  }
+
+  // 3. Check URL query parameters (e.g. ?p=patient-dashboard or ?route=...)
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const qRoute = normalizeRoute(params.get('route') || params.get('p') || params.get('page'));
+    if (qRoute) return qRoute;
+  } catch {}
+
+  // 4. Check localStorage for persisted active route
+  try {
+    const savedLocal = localStorage.getItem('nhealth_active_route');
+    const validLocal = normalizeRoute(savedLocal);
+    if (validLocal) return validLocal;
+  } catch {}
+
+  // 5. Check sessionStorage for fallback
+  try {
+    const savedSession = sessionStorage.getItem('nhealth_active_route');
+    const validSession = normalizeRoute(savedSession);
+    if (validSession) return validSession;
+  } catch {}
+
+  // 6. Check logged in user account type
+  try {
+    const savedUser = localStorage.getItem('nhealth_user');
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      if (user?.role === 'Patient' || user?.accountType === 'Patient') {
+        return 'patient-dashboard';
+      }
+      if (user?.role) {
+        return 'dashboard';
+      }
+    }
+  } catch {}
+
   return 'home';
 }
 
@@ -380,34 +440,16 @@ export default function App() {
     }
   });
 
-  // SPA Routing State with Full Refresh Persistence (URL path, sessionStorage & localStorage)
+  // SPA Routing State with Full Refresh Persistence (URL path, window.location.hash & localStorage)
   const [currentRoute, setCurrentRoute] = useState<RoutePath>(() => {
-    let storedUser: UserAccount | null = null;
-    try {
-      const saved = localStorage.getItem('nhealth_user');
-      if (saved) storedUser = JSON.parse(saved);
-    } catch {}
-
+    const initial = getRouteFromLocation();
     if (typeof window !== 'undefined') {
-      if (window.location.hash === '#teams') return 'teams';
-      const pathRoute = getRouteFromPath(window.location.pathname);
-      if (pathRoute && pathRoute !== 'home') {
-        sessionStorage.setItem('nhealth_active_route', pathRoute);
-        return pathRoute;
-      }
-      // Check session storage for persisted route on refresh
-      const savedSession = sessionStorage.getItem('nhealth_active_route') as RoutePath | null;
-      if (savedSession && savedSession !== 'home') {
-        return savedSession;
-      }
-      if (storedUser) {
-        const root = storedUser.role === 'Patient' || storedUser.accountType === 'Patient' ? 'patient-dashboard' : 'dashboard';
-        sessionStorage.setItem('nhealth_active_route', root);
-        return root;
-      }
-      return 'home';
+      try {
+        localStorage.setItem('nhealth_active_route', initial);
+        sessionStorage.setItem('nhealth_active_route', initial);
+      } catch {}
     }
-    return storedUser ? 'patient-dashboard' : 'home';
+    return initial;
   });
 
   // Floating Exit Toast prompt for root page gradual exit
@@ -422,7 +464,10 @@ export default function App() {
       else path = `/${route}`;
     }
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('nhealth_active_route', route);
+      try {
+        localStorage.setItem('nhealth_active_route', route);
+        sessionStorage.setItem('nhealth_active_route', route);
+      } catch {}
       window.history.pushState({ route }, '', path);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -442,14 +487,12 @@ export default function App() {
         return;
       }
 
-      // 3. Resolve destination route from history state or URL
+      // 3. Resolve destination route from history state, hash, path, or localStorage
       let destRoute: RoutePath = 'home';
-      if (e.state?.route) {
+      if (e.state?.route && VALID_ROUTES.includes(e.state.route)) {
         destRoute = e.state.route;
-      } else if (window.location.hash === '#teams') {
-        destRoute = 'teams';
       } else {
-        destRoute = getRouteFromPath(window.location.pathname);
+        destRoute = getRouteFromLocation();
       }
 
       const rootRoute: RoutePath = isLoggedIn
@@ -469,13 +512,20 @@ export default function App() {
 
       // 5. Navigate 1 step back to previously visited internal page
       setCurrentRoute(destRoute);
-      sessionStorage.setItem('nhealth_active_route', destRoute);
+      try {
+        localStorage.setItem('nhealth_active_route', destRoute);
+        sessionStorage.setItem('nhealth_active_route', destRoute);
+      } catch {}
     };
 
     const handleHashChange = () => {
-      if (window.location.hash === '#teams') {
-        setCurrentRoute('teams');
-        sessionStorage.setItem('nhealth_active_route', 'teams');
+      const detected = getRouteFromLocation();
+      if (detected && detected !== currentRoute) {
+        setCurrentRoute(detected);
+        try {
+          localStorage.setItem('nhealth_active_route', detected);
+          sessionStorage.setItem('nhealth_active_route', detected);
+        } catch {}
       }
     };
 
@@ -487,10 +537,13 @@ export default function App() {
     };
   }, [currentRoute, isLoggedIn, currentUser]);
 
-  // Keep URL & sessionStorage in sync on mount
+  // Keep URL, localStorage & sessionStorage strictly synchronized on route change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('nhealth_active_route', currentRoute);
+      try {
+        localStorage.setItem('nhealth_active_route', currentRoute);
+        sessionStorage.setItem('nhealth_active_route', currentRoute);
+      } catch {}
       const expectedPath = currentRoute === 'home' ? '/' : currentRoute === 'teams' ? '/teams' : `/${currentRoute}`;
       if (window.location.pathname !== expectedPath && !window.location.pathname.startsWith(expectedPath)) {
         window.history.replaceState({ route: currentRoute }, '', expectedPath);
@@ -786,10 +839,16 @@ export default function App() {
       }, 1000);
     };
 
+    const onTouchCancel = () => {
+      isMarqueeTouched.current = false;
+      if (resumeTouchTimeout) clearTimeout(resumeTouchTimeout);
+    };
+
     el.addEventListener('mouseenter', onMouseEnter);
     el.addEventListener('mouseleave', onMouseLeave);
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchCancel, { passive: true });
 
     // Smooth continuous horizontal auto-scroll loop
     const scrollLoop = () => {
@@ -818,6 +877,7 @@ export default function App() {
       el.removeEventListener('mouseleave', onMouseLeave);
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchCancel);
     };
   }, []);
 
@@ -829,7 +889,7 @@ export default function App() {
       if (!el) return;
 
       const delta = e.clientX - marqueeStartX.current;
-      if (Math.abs(delta) > 5) {
+      if (Math.abs(delta) > 10) {
         marqueeHasDragged.current = true;
       }
       el.scrollLeft = marqueeStartScrollLeft.current - delta;
@@ -847,13 +907,20 @@ export default function App() {
       }
     };
 
-    const handleGlobalMouseUp = () => {
+    const handleGlobalMouseUp = (e: MouseEvent) => {
       if (isMarqueeDragging.current) {
+        const delta = Math.abs(e.clientX - marqueeStartX.current);
         isMarqueeDragging.current = false;
         setIsMarqueeGrabbing(false);
-        setTimeout(() => {
+        if (delta <= 10) {
+          // It was a click, not a drag! Clear dragged flag immediately so click fires cleanly
           marqueeHasDragged.current = false;
-        }, 80);
+        } else {
+          // Intentional drag gesture
+          setTimeout(() => {
+            marqueeHasDragged.current = false;
+          }, 80);
+        }
       }
     };
 
@@ -2214,21 +2281,24 @@ export default function App() {
         </section>
 
         {/* Seamless Auto-Scrolling Service Banner / Marquee Section */}
-        <section className="bg-gradient-to-b from-[#00172b] to-[#f8fafc] pt-6 pb-12 border-b border-slate-200/80">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
+        <section className="bg-gradient-to-b from-[#00172b] via-[#02213a] to-[#f8fafc] pt-7 pb-12 border-b border-slate-200/80">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12">
 
             <div className="py-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#008080]">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Comprehensive On-Demand Healthcare Services</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-950/80 border border-teal-500/40 text-teal-300 text-xs font-bold uppercase tracking-wider shadow-sm">
+                    <Sparkles className="w-3.5 h-3.5 text-teal-300 animate-pulse" />
+                    <span>Comprehensive On-Demand Healthcare Services</span>
+                  </div>
                 </div>
-                <div className="text-xs font-medium text-slate-500">
-                  Hover to pause · Drag to explore · Click to schedule
+                <div className="text-xs font-medium text-slate-300 flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Hover to pause · Drag or swipe to explore · Tap/Click to schedule</span>
                 </div>
               </div>
 
-              {/* Marquee Wrapper with soft edge gradient masks - Auto-scrolls on Desktop & Mobile with Pause-on-hover & Click-Drag */}
+              {/* Marquee Wrapper - Auto-scrolls on Desktop & Mobile with Pause-on-hover & Click-Drag */}
               <div
                 ref={servicesMarqueeRef}
                 onMouseDown={handleMarqueeMouseDown}
@@ -2240,25 +2310,28 @@ export default function App() {
                   msOverflowStyle: 'none',
                 }}
               >
-                {/* Left Gradient Fade */}
-                <div className="pointer-events-none absolute inset-y-0 left-0 w-8 sm:w-20 bg-gradient-to-r from-[#f0f4f8] to-transparent z-10" />
-
-                {/* Right Gradient Fade */}
-                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 sm:w-20 bg-gradient-to-l from-[#e2e8f0] to-transparent z-10" />
-
                 {/* Unified Continuous Moving Track on Desktop & Mobile */}
-                <div className="w-max flex gap-5">
+                <div className="w-max flex gap-4 sm:gap-5 px-1">
                   {marqueeItems.map((item, idx) => {
                     const IconComponent = item.icon;
                     return (
                       <div
                         key={`${item.id}-${idx}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Book ${item.name}`}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openBookingFor(item.name);
+                          }
+                        }}
                         onClick={() => {
                           if (!marqueeHasDragged.current) {
                             openBookingFor(item.name);
                           }
                         }}
-                        className="w-64 sm:w-72 shrink-0 bg-white hover:bg-slate-50/70 rounded-2xl border border-slate-200 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col p-3.5 text-left group/card select-none"
+                        className="w-[260px] sm:w-[285px] shrink-0 bg-white hover:bg-slate-50/90 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-teal-400 transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col p-4 text-left group/card select-none touch-manipulation focus:outline-none focus:ring-2 focus:ring-teal-500"
                       >
                         {/* Service Image Slot with Fallback Container */}
                         <div className="relative w-full h-36 sm:h-40 rounded-xl overflow-hidden bg-slate-900/5 border border-slate-200/90 mb-3 flex items-center justify-center select-none pointer-events-none">
@@ -2271,14 +2344,17 @@ export default function App() {
                             className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105 select-none pointer-events-none"
                             referrerPolicy="no-referrer"
                             onError={(e) => {
-                              // If ImgBB direct URL encounters network or CORS issues, fall back to local saved file
                               const target = e.currentTarget;
-                              if (target.src !== window.location.origin + item.localFile) {
+                              if (!target.dataset.triedLocal && item.localFile) {
+                                target.dataset.triedLocal = 'true';
                                 target.src = item.localFile;
                               } else {
                                 target.style.display = 'none';
                                 const fallbackEl = target.nextElementSibling as HTMLElement;
-                                if (fallbackEl) fallbackEl.style.display = 'flex';
+                                if (fallbackEl) {
+                                  fallbackEl.classList.remove('hidden');
+                                  fallbackEl.classList.add('flex');
+                                }
                               }
                             }}
                           />
@@ -2295,7 +2371,7 @@ export default function App() {
                           </div>
 
                           {/* Category Tag */}
-                          <div className="absolute top-2 left-2 bg-[#002b49]/85 backdrop-blur-xs text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
+                          <div className="absolute top-2.5 left-2.5 bg-[#002b49]/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
                             <IconComponent className="w-3 h-3 text-teal-300" />
                             <span>{item.category}</span>
                           </div>
@@ -2304,17 +2380,40 @@ export default function App() {
                         {/* Service Info Underneath */}
                         <div className="flex-1 flex flex-col justify-between">
                           <div>
-                            <h4 className="text-sm font-bold text-[#002b49] group-hover/card:text-[#008080] transition-colors leading-snug">
+                            <h4 className="text-sm font-bold text-[#002b49] group-hover/card:text-[#008080] transition-colors leading-snug line-clamp-1">
                               {item.name}
                             </h4>
-                            <p className="text-[11px] text-slate-500 font-medium leading-tight mt-1 line-clamp-2">
+                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-1 line-clamp-2 min-h-[32px]">
                               {item.tagline}
                             </p>
                           </div>
 
-                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-[#008080]">
-                            <span>Book Visit</span>
-                            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/card:translate-x-1" />
+                          {/* Action Buttons & Triggers */}
+                          <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openBookingFor(item.name);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-[#008080] text-[#008080] hover:text-white text-xs font-bold transition-all shadow-2xs group-hover/card:bg-[#008080] group-hover/card:text-white cursor-pointer active:scale-95"
+                              title={`Book ${item.name}`}
+                            >
+                              <span>Book Visit</span>
+                              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/card:translate-x-1" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                scrollToServicesGrid();
+                              }}
+                              className="text-[11px] font-semibold text-slate-500 hover:text-[#008080] transition-colors px-2 py-1 rounded-md hover:bg-slate-100/80 cursor-pointer"
+                              title="Explore in Services Catalog"
+                            >
+                              Explore &rarr;
+                            </button>
                           </div>
                         </div>
                       </div>

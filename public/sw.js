@@ -53,10 +53,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation requests: NetworkFirst with offline fallback
+  // Navigation requests: NetworkFirst with 404 & offline fallback to index.html
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/'))
+      fetch(event.request)
+        .then((response) => {
+          if (!response || response.status === 404) {
+            return caches.match('/index.html').then((cached) => {
+              return cached || caches.match('/') || fetch('/');
+            });
+          }
+          return response;
+        })
+        .catch(() => caches.match('/index.html').then((cached) => cached || caches.match('/')))
     );
     return;
   }

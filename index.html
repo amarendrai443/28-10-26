@@ -24,6 +24,25 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet" />
     <script>
+      // Early route detection & hash/path re-hydration
+      (function() {
+        try {
+          var h = window.location.hash || '';
+          if (h) {
+            var raw = h.replace(/^#\/?/, '').split('?')[0].split('/')[0];
+            if (raw && raw !== 'home' && raw !== '') {
+              localStorage.setItem('nhealth_active_route', raw);
+            }
+          } else {
+            var p = window.location.pathname || '';
+            var clean = p.replace(/^\/+/, '').split('/')[0];
+            if (clean && clean !== 'index.html' && clean !== 'home' && clean !== '') {
+              localStorage.setItem('nhealth_active_route', clean);
+            }
+          }
+        } catch (e) {}
+      })();
+
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           if ('caches' in window) {

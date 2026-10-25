@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nhealth™ — Loading...</title>
+    <script>
+      // Single-Page Application 404 Fallback & Route Re-hydration
+      (function() {
+        try {
+          var path = window.location.pathname || '';
+          var search = window.location.search || '';
+          var hash = window.location.hash || '';
+          // Strip leading and trailing slashes
+          var clean = path.replace(/^\/+|\/+$/g, '');
+          var route = clean.split('/')[0];
+
+          if (route && route !== '404' && route !== 'index.html') {
+            localStorage.setItem('nhealth_active_route', route);
+          }
+
+          // Redirect to root index.html with hash preserving target route and parameters
+          var targetHash = route ? '#' + route : '';
+          var redirectUrl = '/' + (targetHash ? targetHash : '') + (search ? (targetHash ? search : '?' + search.replace(/^\?/, '')) : '');
+          window.location.replace(redirectUrl);
+        } catch (err) {
+          window.location.replace('/');
+        }
+      })();
+    </script>
+  </head>
+  <body style="margin: 0; background-color: #001424; color: #ffffff; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh;">
+    <div style="text-align: center; padding: 24px;">
+      <h2 style="font-weight: 700; margin-bottom: 8px;">Reconnecting to Nhealth™...</h2>
+      <p style="color: #38bdf8; font-size: 14px;">Restoring your active session...</p>
+    </div>
+  </body>
+</html>

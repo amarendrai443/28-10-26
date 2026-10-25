@@ -479,13 +479,15 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
     'profile',
   ];
 
-  // Refresh State Persistence: restore active tab from URL hash or sessionStorage
+  // Refresh State Persistence: restore active tab from URL hash, localStorage, or sessionStorage
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
     if (typeof window !== 'undefined') {
-      const hash = window.location.hash.replace('#', '') as DashboardTab;
+      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as DashboardTab;
       if (hash && VALID_TABS.includes(hash)) return hash;
-      const saved = sessionStorage.getItem('nhealth_patient_tab') as DashboardTab;
-      if (saved && VALID_TABS.includes(saved)) return saved;
+      const savedLocal = localStorage.getItem('nhealth_patient_tab') as DashboardTab;
+      if (savedLocal && VALID_TABS.includes(savedLocal)) return savedLocal;
+      const savedSession = sessionStorage.getItem('nhealth_patient_tab') as DashboardTab;
+      if (savedSession && VALID_TABS.includes(savedSession)) return savedSession;
     }
     return 'overview';
   });
@@ -493,8 +495,10 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
   const handleSelectTab = (tab: DashboardTab) => {
     if (tab === activeTab) return;
     try {
+      localStorage.setItem('nhealth_patient_tab', tab);
       sessionStorage.setItem('nhealth_patient_tab', tab);
-      window.history.pushState({ isPatientTab: true, tab }, '', `/patient-dashboard#${tab}`);
+      localStorage.setItem('nhealth_active_route', 'patient-dashboard');
+      window.history.pushState({ isPatientTab: true, tab, route: 'patient-dashboard' }, '', `/patient-dashboard#${tab}`);
     } catch {}
     setActiveTab(tab);
   };
@@ -503,16 +507,25 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
   useEffect(() => {
     const handleTabPopState = (e: PopStateEvent) => {
       if (navHistory.hasOpenModals()) return;
-      const hash = window.location.hash.replace('#', '') as DashboardTab;
+      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as DashboardTab;
       if (e.state?.isPatientTab && e.state.tab && VALID_TABS.includes(e.state.tab)) {
         setActiveTab(e.state.tab);
-        sessionStorage.setItem('nhealth_patient_tab', e.state.tab);
+        try {
+          localStorage.setItem('nhealth_patient_tab', e.state.tab);
+          sessionStorage.setItem('nhealth_patient_tab', e.state.tab);
+        } catch {}
       } else if (hash && VALID_TABS.includes(hash)) {
         setActiveTab(hash);
-        sessionStorage.setItem('nhealth_patient_tab', hash);
+        try {
+          localStorage.setItem('nhealth_patient_tab', hash);
+          sessionStorage.setItem('nhealth_patient_tab', hash);
+        } catch {}
       } else if (activeTab !== 'overview') {
         setActiveTab('overview');
-        sessionStorage.setItem('nhealth_patient_tab', 'overview');
+        try {
+          localStorage.setItem('nhealth_patient_tab', 'overview');
+          sessionStorage.setItem('nhealth_patient_tab', 'overview');
+        } catch {}
       }
     };
     window.addEventListener('popstate', handleTabPopState);
