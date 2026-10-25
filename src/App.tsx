@@ -64,6 +64,9 @@ import { RoleBasedDashboard } from './components/RoleBasedDashboard';
 import { PatientDashboardPage } from './components/PatientDashboardPage';
 import { VoiceAssistantModal } from './components/VoiceAssistantModal';
 import { QuickLookFAB } from './components/QuickLookFAB';
+import { OnlineConsultationPage } from './components/OnlineConsultationPage';
+import { TestimonialsCarousel } from './components/TestimonialsCarousel';
+import { PatientFeedbackModal } from './components/PatientFeedbackModal';
 import {
   PartnerApplication,
   PartnerStatus,
@@ -332,7 +335,8 @@ type RoutePath =
   | 'corporate-enquiries'
   | 'dashboard'
   | 'patient-dashboard'
-  | 'teams';
+  | 'teams'
+  | 'online-consultation';
 
 export const VALID_ROUTES: RoutePath[] = [
   'home',
@@ -343,6 +347,7 @@ export const VALID_ROUTES: RoutePath[] = [
   'dashboard',
   'patient-dashboard',
   'teams',
+  'online-consultation',
 ];
 
 export function normalizeRoute(raw: string | null | undefined): RoutePath | null {
@@ -356,6 +361,7 @@ export function normalizeRoute(raw: string | null | undefined): RoutePath | null
   if (clean === 'patient' || clean === 'patient-portal') return 'patient-dashboard';
   if (clean === 'partner' || clean === 'partners') return 'partner-with-us';
   if (clean === 'enquiry' || clean === 'enquiries') return 'corporate-enquiries';
+  if (clean === 'online-consultation' || clean === 'consultation' || clean === 'online-doctor' || clean === 'online-doctor-consultation' || clean === 'doctor-consultation') return 'online-consultation';
   return null;
 }
 
@@ -700,6 +706,12 @@ export default function App() {
   const [pendingDraftBooking, setPendingDraftBooking] = useState<BookingFormData | null>(null);
   const [confirmedBookingData, setConfirmedBookingData] = useState<ConfirmedBooking | null>(null);
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [feedbackBookingContext, setFeedbackBookingContext] = useState<{
+    serviceName?: string;
+    patientName?: string;
+    city?: string;
+  }>({});
   const [myBookingsModalOpen, setMyBookingsModalOpen] = useState(false);
   const [vitalLensOpen, setVitalLensOpen] = useState(false);
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
@@ -764,6 +776,10 @@ export default function App() {
   useEffect(() => {
     if (isConfirmationModalOpen) return navHistory.pushModal('confirmationModal', 'Booking Confirmed', () => setIsConfirmationModalOpen(false));
   }, [isConfirmationModalOpen]);
+
+  useEffect(() => {
+    if (isFeedbackModalOpen) return navHistory.pushModal('feedbackModal', 'Patient Feedback', () => setIsFeedbackModalOpen(false));
+  }, [isFeedbackModalOpen]);
 
   useEffect(() => {
     if (myBookingsModalOpen) return navHistory.pushModal('myBookings', 'My Bookings', () => setMyBookingsModalOpen(false));
@@ -1220,6 +1236,11 @@ export default function App() {
     }
 
     setConfirmedBookingData(confirmed);
+    setFeedbackBookingContext({
+      serviceName: confirmed.serviceName,
+      patientName: confirmed.patientName,
+      city: confirmed.city,
+    });
     setIsConfirmationModalOpen(true);
     setFamilyCounter((prev) => prev + 1);
     setPendingDraftBooking(null);
@@ -1239,8 +1260,12 @@ export default function App() {
   };
 
   const openBookingFor = (serviceName: string) => {
-    setBookingServiceType(serviceName);
     const sNameLower = serviceName.toLowerCase();
+    if (sNameLower.includes('online doctor') || sNameLower.includes('teleconsult')) {
+      navigateTo('online-consultation', '/online-consultation');
+      return;
+    }
+    setBookingServiceType(serviceName);
     const matched = EXTRACTED_SERVICES.find(
       (s) =>
         s.name.toLowerCase() === sNameLower ||
@@ -1331,6 +1356,75 @@ export default function App() {
         onNavigatePartner={() => navigateTo('partner-with-us', '/partner-with-us')}
         onNavigateCorporate={() => navigateTo('corporate-enquiries', '/corporate-enquiries')}
       />
+    );
+  }
+
+  if (currentRoute === 'online-consultation') {
+    return (
+      <>
+        <OnlineConsultationPage
+          onBackToHome={() => navigateTo('home', '/')}
+          onBookDoctor={(doctor, mode) => {
+            const matchedService = EXTRACTED_SERVICES.find((s) => s.id === 'online-doctor') || EXTRACTED_SERVICES[0];
+            setSelectedServiceForBooking(matchedService);
+            setCustomPrefillSymptoms(`Online Video Consultation with ${doctor.name} (${doctor.specialization}) - Mode: ${mode}`);
+            setIsServiceBookingOpen(true);
+          }}
+          onSelectService={(service, prefill) => {
+            setSelectedServiceForBooking(service);
+            if (prefill?.symptoms) {
+              setCustomPrefillSymptoms(prefill.symptoms);
+            }
+            setIsServiceBookingOpen(true);
+          }}
+        />
+
+        <ServiceBookingModal
+          service={selectedServiceForBooking}
+          isOpen={isServiceBookingOpen}
+          onClose={() => {
+            setIsServiceBookingOpen(false);
+            setCustomPrefillSymptoms('');
+          }}
+          onSubmitBooking={handleBookingFormSubmit}
+          initialPhone={currentUser?.phone || ''}
+          initialName={currentUser?.name || ''}
+          initialSymptoms={customPrefillSymptoms}
+        />
+
+        <GuestWarningModal
+          isOpen={isWarningModalOpen}
+          onClose={() => setIsWarningModalOpen(false)}
+          serviceName={pendingDraftBooking?.serviceName}
+          onLoginRedirect={() => {
+            setIsWarningModalOpen(false);
+            setLoginRedirectFromBooking(true);
+            setLoginModalOpen(true);
+          }}
+          onProceedGuest={() => {
+            setIsWarningModalOpen(false);
+            finalizeBooking(pendingDraftBooking, true);
+          }}
+        />
+
+        <BookingConfirmationModal
+          booking={confirmedBookingData}
+          isOpen={isConfirmationModalOpen}
+          onClose={() => setIsConfirmationModalOpen(false)}
+          isLoggedIn={isLoggedIn}
+          onViewHistory={() => setMyBookingsModalOpen(true)}
+        />
+
+        <MyBookingsModal
+          isOpen={myBookingsModalOpen}
+          onClose={() => setMyBookingsModalOpen(false)}
+          bookings={bookingHistory}
+          userName={currentUser?.name || 'Valued Patient'}
+          onBookNew={() => {
+            setMyBookingsModalOpen(false);
+          }}
+        />
+      </>
     );
   }
 
@@ -2486,6 +2580,10 @@ export default function App() {
             {/* Interactive 16-Service Buttons Grid: Exact Images & Names from https://ibb.co/4wQnyzJB */}
             <ServiceButtonsGrid
               onSelectService={(service) => {
+                if (service.id === 'online-doctor' || service.name.toLowerCase().includes('online doctor')) {
+                  navigateTo('online-consultation', '/online-consultation');
+                  return;
+                }
                 setSelectedServiceForBooking(service);
                 setIsServiceBookingOpen(true);
               }}
@@ -2728,6 +2826,11 @@ export default function App() {
             </div>
           </div>
         </section>
+
+        {/* Auto-Moving Customer Testimonials Section (Strict 3:1.5 Aspect Ratio) */}
+        <TestimonialsCarousel
+          onOpenFeedbackModal={() => setIsFeedbackModalOpen(true)}
+        />
 
         {/* About Us Section */}
         <section id="about-us" className="py-20 lg:py-28 bg-white border-b border-slate-200 scroll-mt-20">
@@ -3191,9 +3294,24 @@ export default function App() {
       <BookingConfirmationModal
         booking={confirmedBookingData}
         isOpen={isConfirmationModalOpen}
-        onClose={() => setIsConfirmationModalOpen(false)}
+        onClose={() => {
+          setIsConfirmationModalOpen(false);
+          // Automatically trigger post-service patient feedback popup
+          setTimeout(() => {
+            setIsFeedbackModalOpen(true);
+          }, 350);
+        }}
         isLoggedIn={isLoggedIn}
         onViewHistory={() => setMyBookingsModalOpen(true)}
+      />
+
+      {/* Automatic Post-Service Patient Feedback & AI Moderation Modal */}
+      <PatientFeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onClose={() => setIsFeedbackModalOpen(false)}
+        serviceName={feedbackBookingContext.serviceName || confirmedBookingData?.serviceName || 'Nhealth Healthcare Service'}
+        patientName={feedbackBookingContext.patientName || currentUser?.name || confirmedBookingData?.patientName || 'Valued Patient'}
+        city={feedbackBookingContext.city || confirmedBookingData?.city || 'Hyderabad'}
       />
 
       {/* My Bookings History Modal for Logged-In Users */}

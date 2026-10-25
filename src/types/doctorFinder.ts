@@ -17,6 +17,8 @@ export interface EmpaneledDoctor {
   modes: ('Home Visit' | 'Video Call' | 'In-Clinic')[];
   availabilityText: string;
   isNhealthVerified: boolean;
+  isNhealthBadged?: boolean; // Nhealth Badged (Verified) Doctor
+  isAvailableNow?: boolean;  // Real-time availability status
   isPremiumEmpaneled: boolean;
   profileImage: string;
   bio: string;

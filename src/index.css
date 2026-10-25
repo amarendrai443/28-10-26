@@ -443,19 +443,39 @@ body {
   }
 }
 
-/* Nhealth AI Symptom & Doctor Finder strict 4:2 Aspect Ratio Frame (Mobile & Tablet Viewports: < 1024px) */
+/* Nhealth AI Symptom & Doctor Finder strict 3:2 Aspect Ratio Frame (Mobile & Tablet Viewports: < 1024px) */
 @media (max-width: 1023px) {
   .symptom-finder-frame,
   .symptom-doctor-finder-container {
-    aspect-ratio: 4 / 2 !important;
+    aspect-ratio: 3 / 2 !important;
     width: 100% !important;
     object-fit: cover !important;
+    overflow: hidden !important;
   }
 }
 @media (min-width: 1024px) {
+  .symptom-finder-frame,
   .symptom-doctor-finder-container {
-    aspect-ratio: 4 / 1;
-    width: 100%;
+    aspect-ratio: auto !important;
+    min-height: 380px !important;
+    width: 100% !important;
+    overflow: visible;
   }
 }
+
+/* Online Doctor Consultation Top Advertising Banner strict 4:1.5 Aspect Ratio Frame (Mobile, Tablet & Desktop) */
+.consultation-banner-frame {
+  aspect-ratio: 4 / 1.5 !important;
+  width: 100% !important;
+  object-fit: cover !important;
+}
+
+/* Trendy Customer Testimonials Carousel Strict 3:1.5 Aspect Ratio Card Slider */
+.testimonial-slider-frame {
+  aspect-ratio: 3 / 1.5 !important;
+  width: 100% !important;
+  object-fit: cover !important;
+}
+
+
 

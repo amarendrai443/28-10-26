@@ -56,8 +56,19 @@ import {
   ChevronRight,
   Gift,
   Tag,
-  Percent
+  Percent,
+  MessageSquare,
+  Star
 } from 'lucide-react';
+
+import {
+  TestimonialItem,
+  getStoredTestimonials,
+  saveStoredTestimonials,
+  updateTestimonialStatus,
+  deleteTestimonial,
+  addAdminTestimonial,
+} from '../utils/testimonialsStorage';
 import {
   PartnerApplication,
   PartnerCategory,
@@ -125,7 +136,7 @@ interface AdminDashboardPageProps {
   onNavigateOnboarding: () => void;
 }
 
-type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising';
+type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials';
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   partners,
@@ -152,7 +163,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   // Dashboard Filters & UI State (Phase 3 Alignment: 4 Primary Buckets)
   const [searchQuery, setSearchQuery] = useState('');
-  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising'];
+  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials'];
   const [rawAlignmentTab, setRawAlignmentTab] = useState<AlignmentTab>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '') as AlignmentTab;
@@ -286,6 +297,115 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       return navHistory.pushModal('admin-delete-banner-modal', 'Delete Banner', () => setDeletingBanner(null));
     }
   }, [deletingBanner]);
+
+  // 3.5 Patient Testimonials & AI Moderation System State
+  const [testimonials, setTestimonials] = useState<TestimonialItem[]>(getStoredTestimonials);
+  const [testimonialFilter, setTestimonialFilter] = useState<'All' | 'approved' | 'flagged_danger' | 'pending'>('All');
+  const [isTestimonialModalOpen, setIsTestimonialModalOpen] = useState(false);
+  const [editingTestimonialId, setEditingTestimonialId] = useState<string | null>(null);
+  const [testimonialForm, setTestimonialForm] = useState<{
+    patientName: string;
+    city: string;
+    serviceName: string;
+    rating: number;
+    feedbackNote: string;
+    complaintNote: string;
+    status: TestimonialItem['status'];
+  }>({
+    patientName: '',
+    city: 'Hyderabad',
+    serviceName: 'Home Diagnostics & Lab Tests',
+    rating: 5,
+    feedbackNote: '',
+    complaintNote: '',
+    status: 'approved',
+  });
+  const [deletingTestimonialItem, setDeletingTestimonialItem] = useState<TestimonialItem | null>(null);
+
+  React.useEffect(() => {
+    const handleTestimonialsSync = () => setTestimonials(getStoredTestimonials());
+    window.addEventListener('nhealth_testimonials_updated', handleTestimonialsSync);
+    return () => window.removeEventListener('nhealth_testimonials_updated', handleTestimonialsSync);
+  }, []);
+
+  const handleOpenAddTestimonial = () => {
+    setEditingTestimonialId(null);
+    setTestimonialForm({
+      patientName: '',
+      city: 'Hyderabad',
+      serviceName: 'Home Diagnostics & Lab Tests',
+      rating: 5,
+      feedbackNote: '',
+      complaintNote: '',
+      status: 'approved',
+    });
+    setIsTestimonialModalOpen(true);
+  };
+
+  const handleOpenEditTestimonial = (item: TestimonialItem) => {
+    setEditingTestimonialId(item.id);
+    setTestimonialForm({
+      patientName: item.patientName,
+      city: item.city || 'Hyderabad',
+      serviceName: item.serviceName,
+      rating: item.rating,
+      feedbackNote: item.feedbackNote,
+      complaintNote: item.complaintNote || '',
+      status: item.status,
+    });
+    setIsTestimonialModalOpen(true);
+  };
+
+  const handleSaveTestimonial = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testimonialForm.feedbackNote.trim()) return;
+
+    if (editingTestimonialId) {
+      const current = getStoredTestimonials();
+      const updated = current.map((t) =>
+        t.id === editingTestimonialId
+          ? {
+              ...t,
+              ...testimonialForm,
+              updatedAt: new Date().toISOString(),
+            }
+          : t
+      );
+      saveStoredTestimonials(updated);
+      showToast('✓ Testimonial updated successfully.');
+    } else {
+      addAdminTestimonial({
+        patientName: testimonialForm.patientName || 'Verified Patient',
+        city: testimonialForm.city || 'Hyderabad',
+        serviceName: testimonialForm.serviceName,
+        rating: testimonialForm.rating,
+        feedbackNote: testimonialForm.feedbackNote,
+        complaintNote: testimonialForm.complaintNote || undefined,
+        status: testimonialForm.status,
+        isVerified: true,
+        avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(testimonialForm.patientName || 'VP')}`,
+      });
+      showToast('✓ New Testimonial added successfully.');
+    }
+
+    setIsTestimonialModalOpen(false);
+  };
+
+  const handleApproveTestimonial = (id: string) => {
+    updateTestimonialStatus(id, 'approved');
+    showToast('✓ Feedback approved & published to live testimonials carousel.');
+  };
+
+  const handleRejectTestimonial = (id: string) => {
+    updateTestimonialStatus(id, 'rejected');
+    showToast('✓ Feedback rejected from live publishing.');
+  };
+
+  const handleDeleteTestimonial = (id: string) => {
+    deleteTestimonial(id);
+    setDeletingTestimonialItem(null);
+    showToast('✓ Testimonial deleted permanently.');
+  };
 
   React.useEffect(() => {
     if (inspectingEnquiry) {
@@ -1041,6 +1161,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     );
   });
 
+  // 8. Testimonials & AI Moderation Metrics
+  const flaggedTestimonials = testimonials.filter((t) => t.status === 'flagged_danger' || Boolean(t.flaggedReason));
+  const flaggedCount = flaggedTestimonials.length;
+  const approvedTestimonials = testimonials.filter((t) => t.status === 'approved');
+  const approvedCount = approvedTestimonials.length;
+
   // Filtered partners list based on Search, Alignment Tab, and Vertical Category
   const filteredPartners = partners.filter((p) => {
     // 1. Search Query
@@ -1289,7 +1415,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         {/* ------------------------------------------------------------- */}
         {/* STATS GRID: Phase 3 Alignment & Centralized Enquiries Pipeline */}
         {/* ------------------------------------------------------------- */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-9 gap-3 sm:gap-4">
           {/* Card 1: Pending Approvals */}
           <div
             onClick={() => setAlignmentTab('Pending')}
@@ -1502,6 +1628,42 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               Dynamic Auto-Slider Carousel
             </span>
           </div>
+
+          {/* Card 9: Testimonials & AI Moderation */}
+          <div
+            onClick={() => setAlignmentTab('Testimonials')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md ${
+              alignmentTab === 'Testimonials'
+                ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/30'
+                : flaggedCount > 0
+                ? 'bg-rose-50/70 border-rose-300 hover:border-rose-400'
+                : 'bg-white border-slate-200 hover:border-amber-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-amber-950 uppercase tracking-wider block">
+                Testimonials
+              </span>
+              <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-xl font-black text-amber-800">
+                {approvedCount} Live
+              </span>
+              {flaggedCount > 0 ? (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-rose-500 text-white animate-pulse">
+                  {flaggedCount} Flagged
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900">
+                  {testimonials.length} Total
+                </span>
+              )}
+            </div>
+            <span className="text-[10.5px] text-amber-900 font-medium mt-0.5 block truncate">
+              {flaggedCount > 0 ? '⚠️ AI Danger Alert pending' : 'Auto-moderated live feed'}
+            </span>
+          </div>
         </div>
 
         {/* ------------------------------------------------------------- */}
@@ -1709,6 +1871,37 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 >
                   {banners.filter((b) => b.isActive).length} Active
                 </span>
+              </button>
+
+              {/* Tab 9: Testimonials & AI Feedback System */}
+              <button
+                type="button"
+                onClick={() => setAlignmentTab('Testimonials')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                  alignmentTab === 'Testimonials'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : flaggedCount > 0
+                    ? 'bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-300'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200'
+                }`}
+              >
+                <Star className="w-3.5 h-3.5 fill-current" />
+                <span>Testimonials</span>
+                {flaggedCount > 0 ? (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-rose-600 text-white animate-pulse">
+                    {flaggedCount} Danger
+                  </span>
+                ) : (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      alignmentTab === 'Testimonials'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-amber-200 text-amber-900'
+                    }`}
+                  >
+                    {approvedCount} Live
+                  </span>
+                )}
               </button>
             </div>
 
@@ -2071,35 +2264,30 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </div>
             </div>
 
-            {/* DUAL SECTION SELECTOR TABS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-1.5 rounded-2xl bg-slate-100 border border-slate-200">
+            {/* FOUR-SECTION SELECTOR TABS (SECTION 1, SECTION 2, ONLINE CONSULTATION & WAITING ROOM) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 p-1.5 rounded-2xl bg-slate-100 border border-slate-200">
               <button
                 type="button"
                 onClick={() => {
                   setAdminBannerSection('section1');
                   setActivePreviewIdx(0);
                 }}
-                className={`flex items-center justify-between p-3.5 rounded-xl font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-between p-3 rounded-xl font-bold transition-all cursor-pointer ${
                   adminBannerSection === 'section1'
                     ? 'bg-white text-indigo-900 shadow-md border border-indigo-200'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
-                <div className="flex items-center gap-2.5 text-left">
+                <div className="flex items-center gap-2 text-left">
                   <div className={`w-3 h-3 rounded-full ${adminBannerSection === 'section1' ? 'bg-indigo-600' : 'bg-slate-300'}`} />
                   <div>
-                    <div className="text-xs sm:text-sm font-black">Banner Section 1 (Top Carousel)</div>
-                    <div className="text-[11px] text-slate-500 font-normal">Displays at the very top of Patient Overview</div>
+                    <div className="text-xs sm:text-sm font-black">Section 1 (Top)</div>
+                    <div className="text-[10px] text-slate-500 font-normal">Patient Top (4:1)</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800">
-                    {banners.filter((b) => b.section === 'section1' && b.isActive).length} Active
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-200 text-slate-700">
-                    {banners.filter((b) => b.section === 'section1').length} Total
-                  </span>
-                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800">
+                  {banners.filter((b) => b.section === 'section1' && b.isActive).length}
+                </span>
               </button>
 
               <button
@@ -2108,27 +2296,70 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   setAdminBannerSection('section2');
                   setActivePreviewIdx(0);
                 }}
-                className={`flex items-center justify-between p-3.5 rounded-xl font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-between p-3 rounded-xl font-bold transition-all cursor-pointer ${
                   adminBannerSection === 'section2'
                     ? 'bg-white text-indigo-900 shadow-md border border-indigo-200'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
-                <div className="flex items-center gap-2.5 text-left">
+                <div className="flex items-center gap-2 text-left">
                   <div className={`w-3 h-3 rounded-full ${adminBannerSection === 'section2' ? 'bg-indigo-600' : 'bg-slate-300'}`} />
                   <div>
-                    <div className="text-xs sm:text-sm font-black">Banner Section 2 (Bottom Carousel)</div>
-                    <div className="text-[11px] text-slate-500 font-normal">Displays directly below Section 1</div>
+                    <div className="text-xs sm:text-sm font-black">Section 2 (Bottom)</div>
+                    <div className="text-[10px] text-slate-500 font-normal">Below Section 1 (4:1)</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800">
-                    {banners.filter((b) => b.section === 'section2' && b.isActive).length} Active
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-200 text-slate-700">
-                    {banners.filter((b) => b.section === 'section2').length} Total
-                  </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800">
+                  {banners.filter((b) => b.section === 'section2' && b.isActive).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminBannerSection('consultation');
+                  setActivePreviewIdx(0);
+                }}
+                className={`flex items-center justify-between p-3 rounded-xl font-bold transition-all cursor-pointer ${
+                  adminBannerSection === 'consultation'
+                    ? 'bg-white text-teal-900 shadow-md border border-teal-300'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <div className="flex items-center gap-2 text-left">
+                  <div className={`w-3 h-3 rounded-full ${adminBannerSection === 'consultation' ? 'bg-[#008080]' : 'bg-slate-300'}`} />
+                  <div>
+                    <div className="text-xs sm:text-sm font-black">Online Consultation</div>
+                    <div className="text-[10px] text-slate-500 font-normal">Top Carousel (4:1.5)</div>
+                  </div>
                 </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-teal-100 text-teal-800">
+                  {banners.filter((b) => b.section === 'consultation' && b.isActive).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminBannerSection('waitingRoom');
+                  setActivePreviewIdx(0);
+                }}
+                className={`flex items-center justify-between p-3 rounded-xl font-bold transition-all cursor-pointer ${
+                  adminBannerSection === 'waitingRoom'
+                    ? 'bg-white text-teal-900 shadow-md border border-teal-300'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <div className="flex items-center gap-2 text-left">
+                  <div className={`w-3 h-3 rounded-full ${adminBannerSection === 'waitingRoom' ? 'bg-[#008080]' : 'bg-slate-300'}`} />
+                  <div>
+                    <div className="text-xs sm:text-sm font-black">Waiting Room Ads</div>
+                    <div className="text-[10px] text-slate-500 font-normal">Pre-Call (16:9)</div>
+                  </div>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
+                  {banners.filter((b) => b.section === 'waitingRoom' && b.isActive).length}
+                </span>
               </button>
             </div>
 
@@ -2142,7 +2373,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
                       <Eye className="w-4 h-4 text-indigo-600" />
                       <span>
-                        Live 4:1 Preview: {adminBannerSection === 'section1' ? 'Banner Section 1 (Top)' : 'Banner Section 2 (Bottom)'}
+                        Live Preview:{' '}
+                        {adminBannerSection === 'section1'
+                          ? 'Banner Section 1 (Top - 4:1)'
+                          : adminBannerSection === 'section2'
+                          ? 'Banner Section 2 (Bottom - 4:1)'
+                          : adminBannerSection === 'waitingRoom'
+                          ? 'Patient Waiting Room (16:9 Ad Carousel)'
+                          : 'Online Doctor Consultation (Top - 4:1.5)'}
                       </span>
                     </h4>
                     {secBanners.length > 0 && (
@@ -2174,8 +2412,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
                   {previewBanner ? (
                     <div
-                      style={{ aspectRatio: '4 / 1', width: '100%' }}
-                      className="relative w-full aspect-[4/1] overflow-hidden rounded-2xl border border-cyan-500/30 shadow-xl bg-[#001424]"
+                      style={{
+                        aspectRatio:
+                          adminBannerSection === 'waitingRoom'
+                            ? '16 / 9'
+                            : adminBannerSection === 'consultation'
+                            ? '4 / 1.5'
+                            : '4 / 1',
+                        width: '100%',
+                      }}
+                      className="relative w-full overflow-hidden rounded-2xl border border-cyan-500/30 shadow-xl bg-[#001424]"
                     >
                       {previewBanner.imageUrl ? (
                         <div className="absolute inset-0 overflow-hidden">
@@ -2205,7 +2451,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             <span className={`text-[8px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                               previewBanner.isActive ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                             }`}>
-                              {previewBanner.isActive ? 'Active on Dashboard' : 'Hidden (Inactive)'}
+                              {previewBanner.isActive ? 'Active' : 'Hidden (Inactive)'}
                             </span>
                           </div>
                           <h2 className="text-xs sm:text-lg md:text-xl font-black text-white tracking-tight drop-shadow-md line-clamp-1 sm:line-clamp-2">
@@ -2229,7 +2475,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     </div>
                   ) : (
                     <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-slate-500 text-xs">
-                      No banners uploaded for {adminBannerSection === 'section1' ? 'Section 1' : 'Section 2'}. Click "+ Add to {adminBannerSection === 'section1' ? 'Section 1' : 'Section 2'}" below.
+                      No banners uploaded for {adminBannerSection === 'section1' ? 'Section 1' : adminBannerSection === 'section2' ? 'Section 2' : adminBannerSection === 'waitingRoom' ? 'Waiting Room' : 'Online Consultation'}. Click "+ Add Banner" below.
                     </div>
                   )}
                 </div>
@@ -2246,11 +2492,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       <h4 className="text-sm sm:text-base font-black text-slate-800 flex items-center gap-2">
                         <ImageIcon className="w-4 h-4 text-indigo-600" />
                         <span>
-                          {adminBannerSection === 'section1' ? 'Banner Section 1 Registry' : 'Banner Section 2 Registry'} ({secBanners.length} banners)
+                          {adminBannerSection === 'section1' ? 'Banner Section 1 Registry' : adminBannerSection === 'section2' ? 'Banner Section 2 Registry' : adminBannerSection === 'waitingRoom' ? 'Waiting Room Ad Carousel Registry' : 'Online Consultation Banner Registry'} ({secBanners.length} banners)
                         </span>
                       </h4>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        Independent order, status toggle, and editing for {adminBannerSection === 'section1' ? 'Section 1 (Top)' : 'Section 2 (Bottom)'}.
+                        Independent order, status toggle, and editing for {adminBannerSection === 'section1' ? 'Section 1 (Top)' : adminBannerSection === 'section2' ? 'Section 2 (Bottom)' : adminBannerSection === 'waitingRoom' ? 'Patient Waiting Room (16:9 Carousel)' : 'Online Consultation (4:1.5 Top Carousel)'}.
                       </p>
                     </div>
                     <button
@@ -2259,7 +2505,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>+ Add Banner to {adminBannerSection === 'section1' ? 'Section 1' : 'Section 2'}</span>
+                      <span>+ Add Banner to {adminBannerSection === 'section1' ? 'Section 1' : adminBannerSection === 'section2' ? 'Section 2' : adminBannerSection === 'waitingRoom' ? 'Waiting Room' : 'Consultation'}</span>
                     </button>
                   </div>
 
@@ -2267,7 +2513,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <div className="p-12 text-center">
                       <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                       <h4 className="text-base font-bold text-slate-700">
-                        No banners in {adminBannerSection === 'section1' ? 'Section 1' : 'Section 2'}
+                        No banners in {adminBannerSection === 'section1' ? 'Section 1' : adminBannerSection === 'section2' ? 'Section 2' : adminBannerSection === 'waitingRoom' ? 'Waiting Room' : 'Online Consultation'}
                       </h4>
                       <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                         Add a new banner or reset to system defaults.
@@ -2286,7 +2532,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         <thead>
                           <tr className="bg-slate-50/90 text-slate-500 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                             <th className="py-3 px-4 text-center w-16">Order</th>
-                            <th className="py-3 px-4 w-32">Thumbnail (4:1)</th>
+                            <th className="py-3 px-4 w-32">Thumbnail</th>
                             <th className="py-3 px-4">Banner Details &amp; Target</th>
                             <th className="py-3 px-4 text-center">Aspect / Timing</th>
                             <th className="py-3 px-4 text-center">Status</th>
@@ -2325,11 +2571,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 </div>
                               </td>
 
-                              {/* 2. 4:1 Thumbnail */}
+                              {/* 2. Thumbnail */}
                               <td className="py-3.5 px-4 align-middle">
                                 <div
-                                  style={{ aspectRatio: '4 / 1', width: '104px' }}
-                                  className="rounded-xl border border-slate-200 overflow-hidden bg-slate-900 relative shadow-2xs shrink-0 aspect-[4/1]"
+                                  style={{ aspectRatio: banner.section === 'consultation' ? '4 / 1.5' : '4 / 1', width: '104px' }}
+                                  className="rounded-xl border border-slate-200 overflow-hidden bg-slate-900 relative shadow-2xs shrink-0"
                                 >
                                   {banner.imageUrl ? (
                                     <img
@@ -2343,7 +2589,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                     </div>
                                   )}
                                   <span className="absolute bottom-0.5 right-0.5 text-[7px] font-mono font-bold px-1 rounded bg-black/70 text-white">
-                                    4:1
+                                    {banner.section === 'consultation' ? '4:1.5' : '4:1'}
                                   </span>
                                 </div>
                               </td>
@@ -2353,7 +2599,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-2">
                                     <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                      {banner.tag || (banner.section === 'section1' ? 'SECTION 1' : 'SECTION 2')}
+                                      {banner.tag || (banner.section === 'consultation' ? 'ONLINE CARE' : banner.section === 'section1' ? 'SECTION 1' : 'SECTION 2')}
                                     </span>
                                     <span className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-1">
                                       {banner.title}
@@ -2373,10 +2619,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               {/* 4. Sizing & Interval */}
                               <td className="py-3.5 px-4 text-center align-middle">
                                 <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
-                                  4:1 Aspect Ratio
+                                  {banner.section === 'consultation' ? '4:1.5 Aspect Ratio' : '4:1 Aspect Ratio'}
                                 </span>
                                 <div className="text-[10px] text-slate-400 font-mono mt-1">
-                                  {banner.autoPlayInterval || 5}s cycle ({banner.scale || 100}%)
+                                  {banner.autoPlayInterval || 4.5}s cycle ({banner.scale || 100}%)
                                 </div>
                               </td>
 
@@ -2878,49 +3124,91 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <label className="text-xs font-bold text-slate-700 block">
                       Target Banner Section
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <button
                         type="button"
                         onClick={() => setBannerForm((prev) => ({ ...prev, section: 'section1' }))}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
                           (bannerForm.section || adminBannerSection) === 'section1'
                             ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                             : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        <div>Banner Section 1</div>
+                        <div>Section 1</div>
                         <div className={`text-[10px] ${ (bannerForm.section || adminBannerSection) === 'section1' ? 'text-indigo-200' : 'text-slate-400'}`}>
-                          Top Carousel
+                          Patient Top (4:1)
                         </div>
                       </button>
                       <button
                         type="button"
                         onClick={() => setBannerForm((prev) => ({ ...prev, section: 'section2' }))}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
                           (bannerForm.section || adminBannerSection) === 'section2'
                             ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                             : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        <div>Banner Section 2</div>
+                        <div>Section 2</div>
                         <div className={`text-[10px] ${ (bannerForm.section || adminBannerSection) === 'section2' ? 'text-indigo-200' : 'text-slate-400'}`}>
-                          Bottom Carousel
+                          Patient Bottom (4:1)
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBannerForm((prev) => ({ ...prev, section: 'consultation' }))}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
+                          (bannerForm.section || adminBannerSection) === 'consultation'
+                            ? 'bg-teal-700 text-white border-teal-700 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div>Consultation</div>
+                        <div className={`text-[10px] ${ (bannerForm.section || adminBannerSection) === 'consultation' ? 'text-teal-200' : 'text-slate-400'}`}>
+                          Top Carousel (4:1.5)
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBannerForm((prev) => ({ ...prev, section: 'waitingRoom' }))}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
+                          (bannerForm.section || adminBannerSection) === 'waitingRoom'
+                            ? 'bg-teal-700 text-white border-teal-700 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div>Waiting Room</div>
+                        <div className={`text-[10px] ${ (bannerForm.section || adminBannerSection) === 'waitingRoom' ? 'text-teal-200' : 'text-slate-400'}`}>
+                          Pre-Call Ads (16:9)
                         </div>
                       </button>
                     </div>
                   </div>
 
-                  {/* Image Upload & 4:1 Preview Box */}
+                  {/* Image Upload & Preview Box */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                       <span>1. Banner Graphic (Upload File or Enter Image URL)</span>
-                      <span className="text-[11px] text-indigo-600 font-mono font-bold">Strict 4:1 Aspect Ratio</span>
+                      <span className="text-[11px] text-indigo-600 font-mono font-bold">
+                        {(bannerForm.section || adminBannerSection) === 'waitingRoom'
+                          ? 'Strict 16:9 Aspect Ratio'
+                          : (bannerForm.section || adminBannerSection) === 'consultation'
+                          ? 'Strict 4:1.5 Aspect Ratio'
+                          : 'Strict 4:1 Aspect Ratio'}
+                      </span>
                     </label>
 
-                    {/* Strict 4:1 Preview Box */}
+                    {/* Preview Box */}
                     <div
-                      style={{ aspectRatio: '4 / 1', width: '100%' }}
-                      className="w-full aspect-[4/1] rounded-2xl border border-slate-200 overflow-hidden bg-slate-900 relative"
+                      style={{
+                        aspectRatio:
+                          (bannerForm.section || adminBannerSection) === 'waitingRoom'
+                            ? '16 / 9'
+                            : (bannerForm.section || adminBannerSection) === 'consultation'
+                            ? '4 / 1.5'
+                            : '4 / 1',
+                        width: '100%',
+                      }}
+                      className="w-full rounded-2xl border border-slate-200 overflow-hidden bg-slate-900 relative"
                     >
                       {adFormImagePreview || bannerForm.imageUrl ? (
                         <img
@@ -3741,6 +4029,502 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold cursor-pointer transition-colors"
                     >
                       Yes, Delete Promotion
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : alignmentTab === 'Testimonials' ? (
+          <div className="space-y-6">
+            {/* Top Header Card */}
+            <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                    <Star className="w-5 h-5 fill-amber-500" />
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 tracking-tight">
+                      Patient Feedback &amp; AI Content Moderation
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Automated filter validates reviews (4+ Stars) for profanity &amp; abusive language before auto-publishing.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenAddTestimonial}
+                  className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#008080] to-[#005a5a] hover:from-[#006e6e] hover:to-[#004747] text-white text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add New Testimonial</span>
+                </button>
+              </div>
+            </div>
+
+            {/* DANGER ALERT SECTION FOR FLAGGED / ABUSIVE CONTENT */}
+            {flaggedCount > 0 ? (
+              <div className="bg-rose-50 border-2 border-rose-500 rounded-3xl p-5 shadow-sm space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-rose-950 uppercase tracking-wider flex items-center gap-2">
+                        <span>Danger Alert: AI Content Moderation Blocked ({flaggedCount})</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-200 text-rose-900 animate-pulse">
+                          Manual Review Required
+                        </span>
+                      </h4>
+                      <p className="text-xs text-rose-800 mt-0.5">
+                        These patient submissions were blocked from the live website because the automated NLP filter flagged abusive, profane, or inappropriate language.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  {flaggedTestimonials.map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-white rounded-2xl p-4 border border-rose-200 shadow-2xs space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-800 font-bold text-xs flex items-center justify-center">
+                            {item.patientName.charAt(0)}
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 block">
+                              {item.patientName}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {item.serviceName} • {item.city}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                          BLOCKED
+                        </span>
+                      </div>
+
+                      <div className="bg-rose-50/70 rounded-xl p-2.5 border border-rose-200/80">
+                        <span className="text-[10px] font-bold text-rose-700 block uppercase tracking-wider mb-1">
+                          ⚠️ AI Flag Reason:
+                        </span>
+                        <p className="text-xs font-semibold text-rose-950">
+                          {item.flaggedReason || 'Unusual or offensive content detected.'}
+                        </p>
+                      </div>
+
+                      <div className="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-1 mb-1 text-amber-500">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`w-3 h-3 ${
+                                i < item.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'
+                              }`}
+                            />
+                          ))}
+                          <span className="text-[10px] font-bold text-slate-500 ml-1">
+                            ({item.rating}/5)
+                          </span>
+                        </div>
+                        <p className="italic font-medium">"{item.feedbackNote}"</p>
+                        {item.complaintNote && (
+                          <div className="mt-2 pt-2 border-t border-slate-200 text-[11px] text-rose-700">
+                            <strong>Complaint recorded:</strong> {item.complaintNote}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveTestimonial(item.id)}
+                          className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve (Override AI)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectTestimonial(item.id)}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer transition-colors"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingTestimonialItem(item)}
+                          className="p-1.5 rounded-xl text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
+                          title="Delete Permanently"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3 text-xs text-emerald-900">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <span className="font-bold">No Flagged or Abusive Reviews Detected.</span>
+                  <span className="text-emerald-700 ml-1">
+                    The automated AI moderation filter is actively guarding customer testimonials.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* LIVE TESTIMONIALS REPOSITORY TABLE */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Filter Status:
+                  </span>
+                  {(['All', 'approved', 'flagged_danger', 'pending'] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setTestimonialFilter(st)}
+                      className={`px-3 py-1 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer ${
+                        testimonialFilter === st
+                          ? 'bg-[#002b49] text-white'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {st === 'flagged_danger' ? 'Flagged Danger' : st}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-xs text-slate-500 font-medium">
+                  Total Reviews: <strong>{testimonials.length}</strong> • Live Carousel: <strong>{approvedCount}</strong>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/90 text-slate-500 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wider">
+                      <th className="py-3 px-4">Patient Profile</th>
+                      <th className="py-3 px-4">Service</th>
+                      <th className="py-3 px-4">Rating</th>
+                      <th className="py-3 px-4">Feedback Content</th>
+                      <th className="py-3 px-4">AI Moderation Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {testimonials
+                      .filter((t) => testimonialFilter === 'All' || t.status === testimonialFilter)
+                      .map((t) => {
+                        const isApproved = t.status === 'approved';
+                        const isFlagged = t.status === 'flagged_danger';
+
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-teal-100 text-[#008080] font-bold text-xs flex items-center justify-center shrink-0">
+                                  {t.patientName.charAt(0)}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                    <span>{t.patientName}</span>
+                                    {t.isVerified && (
+                                      <CheckCircle className="w-3.5 h-3.5 text-teal-600" />
+                                    )}
+                                  </div>
+                                  <span className="text-[11px] text-slate-400 block">{t.city}</span>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4 font-semibold text-slate-700">
+                              {t.serviceName}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-0.5 text-amber-500">
+                                {Array.from({ length: 5 }).map((_, idx) => (
+                                  <Star
+                                    key={idx}
+                                    className={`w-3.5 h-3.5 ${
+                                      idx < t.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'
+                                    }`}
+                                  />
+                                ))}
+                                <span className="text-[11px] font-bold ml-1 text-slate-600">
+                                  {t.rating}.0
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4 max-w-xs">
+                              <p className="line-clamp-2 text-slate-800 font-medium italic">
+                                "{t.feedbackNote}"
+                              </p>
+                              {t.complaintNote && (
+                                <p className="text-[11px] text-rose-600 font-semibold mt-1">
+                                  ⚠️ Complaint: {t.complaintNote}
+                                </p>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {isApproved ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <Check className="w-3 h-3" /> Live (Approved)
+                                </span>
+                              ) : isFlagged ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                  <AlertTriangle className="w-3 h-3" /> Flagged Danger
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                  {t.status}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateTestimonialStatus(
+                                      t.id,
+                                      isApproved ? 'rejected' : 'approved'
+                                    )
+                                  }
+                                  className={`px-2 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                                    isApproved
+                                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                  }`}
+                                  title={isApproved ? 'Hide from live carousel' : 'Publish to live carousel'}
+                                >
+                                  {isApproved ? 'Hide' : 'Publish'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditTestimonial(t)}
+                                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg cursor-pointer"
+                                  title="Edit Testimonial"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingTestimonialItem(t)}
+                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer"
+                                  title="Delete Testimonial"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* ADD / EDIT TESTIMONIAL MODAL */}
+            {isTestimonialModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <h4 className="text-base font-black text-slate-800">
+                      {editingTestimonialId ? 'Edit Testimonial' : 'Add New Patient Testimonial'}
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setIsTestimonialModalOpen(false)}
+                      className="text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveTestimonial} className="space-y-3.5">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          Patient Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={testimonialForm.patientName}
+                          onChange={(e) =>
+                            setTestimonialForm((p) => ({ ...p, patientName: e.target.value }))
+                          }
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold"
+                          placeholder="e.g. Rahul Sharma"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">City</label>
+                        <input
+                          type="text"
+                          required
+                          value={testimonialForm.city}
+                          onChange={(e) =>
+                            setTestimonialForm((p) => ({ ...p, city: e.target.value }))
+                          }
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold"
+                          placeholder="e.g. Hyderabad"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          Service Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={testimonialForm.serviceName}
+                          onChange={(e) =>
+                            setTestimonialForm((p) => ({ ...p, serviceName: e.target.value }))
+                          }
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          Star Rating (1 - 5)
+                        </label>
+                        <select
+                          value={testimonialForm.rating}
+                          onChange={(e) =>
+                            setTestimonialForm((p) => ({ ...p, rating: Number(e.target.value) }))
+                          }
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold bg-white"
+                        >
+                          <option value={5}>⭐⭐⭐⭐⭐ (5 Stars)</option>
+                          <option value={4}>⭐⭐⭐⭐ (4 Stars)</option>
+                          <option value={3}>⭐⭐⭐ (3 Stars)</option>
+                          <option value={2}>⭐⭐ (2 Stars)</option>
+                          <option value={1}>⭐ (1 Star)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Feedback Note (Published on Carousel)
+                      </label>
+                      <textarea
+                        rows={3}
+                        required
+                        value={testimonialForm.feedbackNote}
+                        onChange={(e) =>
+                          setTestimonialForm((p) => ({ ...p, feedbackNote: e.target.value }))
+                        }
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        placeholder="Patient review note..."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Complaints Note (Internal / Admin only)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={testimonialForm.complaintNote}
+                        onChange={(e) =>
+                          setTestimonialForm((p) => ({ ...p, complaintNote: e.target.value }))
+                        }
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        placeholder="Any grievance recorded..."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Status</label>
+                      <select
+                        value={testimonialForm.status}
+                        onChange={(e) =>
+                          setTestimonialForm((p) => ({
+                            ...p,
+                            status: e.target.value as TestimonialItem['status'],
+                          }))
+                        }
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold bg-white"
+                      >
+                        <option value="approved">Approved (Live on Carousel)</option>
+                        <option value="pending">Pending</option>
+                        <option value="flagged_danger">Flagged Danger (Blocked)</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setIsTestimonialModalOpen(false)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#008080] hover:bg-[#006e6e] cursor-pointer shadow-md"
+                      >
+                        {editingTestimonialId ? 'Save Changes' : 'Create Testimonial'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* DELETE TESTIMONIAL CONFIRMATION MODAL */}
+            {deletingTestimonialItem && (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center space-y-4">
+                  <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 mx-auto flex items-center justify-center">
+                    <Trash2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-slate-800">Delete Testimonial?</h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Are you sure you want to delete review from{' '}
+                      <strong>{deletingTestimonialItem.patientName}</strong>? This action cannot be undone.
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setDeletingTestimonialItem(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTestimonial(deletingTestimonialItem.id)}
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer"
+                    >
+                      Yes, Delete
                     </button>
                   </div>
                 </div>

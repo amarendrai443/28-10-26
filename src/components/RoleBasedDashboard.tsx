@@ -40,6 +40,10 @@ import {
 import { UserAccount, ConfirmedBooking } from '../types/serviceBooking';
 import { DashboardRole, LinkedAccount } from '../types/dashboard';
 import { PartnerApplication, INITIAL_PARTNERS } from '../types/partner';
+import {
+  getGlobalDoctorOnlineStatus,
+  setGlobalDoctorOnlineStatus,
+} from '../utils/doctorAvailabilityStore';
 
 interface RoleBasedDashboardProps {
   currentUser: UserAccount;
@@ -230,7 +234,7 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
     generalTotal: 80,
   });
 
-  const [doctorOnline, setDoctorOnline] = useState(true);
+  const [doctorOnline, setDoctorOnline] = useState(() => getGlobalDoctorOnlineStatus());
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-between selection:bg-[#008080]/15 selection:text-[#002b49] text-slate-800">
@@ -630,7 +634,8 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
                     type="button"
                     onClick={() => {
                       setDoctorOnline(true);
-                      showToast('Status updated: Accepting Tele-OPD & Home Visits.');
+                      setGlobalDoctorOnlineStatus(true);
+                      showToast('Status updated: Live on Nhealth (Immediate Connect Enabled for Patients).');
                     }}
                     className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                       doctorOnline ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600'
@@ -642,7 +647,8 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
                     type="button"
                     onClick={() => {
                       setDoctorOnline(false);
-                      showToast('Status updated: In Clinic / Offline for today.');
+                      setGlobalDoctorOnlineStatus(false);
+                      showToast('Status updated: Offline for Immediate Calls (Scheduled Slots Only).');
                     }}
                     className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                       !doctorOnline ? 'bg-slate-700 text-white shadow-xs' : 'text-slate-600'

@@ -48,6 +48,7 @@ export const EMPANELED_DOCTORS: EmpaneledDoctor[] = [
     modes: ['Home Visit', 'Video Call', 'In-Clinic'],
     availabilityText: 'Available Today · Home Visit in 45 mins',
     isNhealthVerified: true,
+    isNhealthBadged: true,
     isPremiumEmpaneled: true,
     profileImage: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80',
     bio: 'Former Chief Cardiologist with over 22 years of clinical excellence in acute chest pain triage, ECG evaluation, and chronic hypertensive disease management.',
@@ -72,9 +73,34 @@ export const EMPANELED_DOCTORS: EmpaneledDoctor[] = [
     modes: ['Video Call', 'Home Visit'],
     availabilityText: 'Next Video Slot: Within 20 Mins',
     isNhealthVerified: true,
+    isNhealthBadged: true,
     isPremiumEmpaneled: true,
     profileImage: 'https://images.unsplash.com/photo-1594824813501-4837e3146468?auto=format&fit=crop&w=400&q=80',
     bio: 'Specializes in tele-cardiology, ambulatory blood pressure monitoring, post-angioplasty home follow-ups, and lipid disorder protocols.',
+  },
+  {
+    id: 'DOC-CARD-REG-01',
+    name: 'Dr. S. K. Raman',
+    title: 'Consultant Cardiologist & Heart Physician',
+    degrees: 'MBBS, MD (General Medicine), PGDCC',
+    specialization: 'Cardiology',
+    subSpecialty: 'Preventive Cardiology & Hypertension',
+    experienceYears: 11,
+    hospitalAffiliation: 'City Medical Centre & Private Clinic',
+    city: 'Hyderabad',
+    locality: 'Ameerpet & SR Nagar',
+    pincodes: ['500016', '500038', '500082'],
+    languages: ['English', 'Telugu', 'Hindi'],
+    rating: 4.65,
+    reviewCount: 310,
+    consultationFee: 600,
+    modes: ['Video Call', 'In-Clinic'],
+    availabilityText: 'Available Today · Tele-OPD',
+    isNhealthVerified: false,
+    isNhealthBadged: false,
+    isPremiumEmpaneled: false,
+    profileImage: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=400&q=80',
+    bio: 'Independent clinical cardiologist with 11 years in ambulatory blood pressure regulation, routine ECG checks, and cardiovascular lifestyle coaching.',
   },
 
   // Orthopedics
@@ -97,6 +123,7 @@ export const EMPANELED_DOCTORS: EmpaneledDoctor[] = [
     modes: ['Home Visit', 'In-Clinic', 'Video Call'],
     availabilityText: 'Available Today · Priority Home Visit',
     isNhealthVerified: true,
+    isNhealthBadged: true,
     isPremiumEmpaneled: true,
     profileImage: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=400&q=80',
     bio: 'Renowned orthopedic surgeon specializing in knee osteo-arthritis bedside consultations, portable X-ray evaluations, and at-home physical recovery management.',
@@ -121,9 +148,34 @@ export const EMPANELED_DOCTORS: EmpaneledDoctor[] = [
     modes: ['Home Visit', 'Video Call'],
     availabilityText: 'Available Today · Slot at 4:30 PM',
     isNhealthVerified: true,
+    isNhealthBadged: true,
     isPremiumEmpaneled: true,
     profileImage: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=400&q=80',
     bio: 'Expertise in acute ligament injuries, back spasm treatments, lumbar sciatica diagnosis, and coordinated home physiotherapy protocols.',
+  },
+  {
+    id: 'DOC-ORTHO-REG-01',
+    name: 'Dr. Manoj Verma',
+    title: 'Orthopedic Consultant & Trauma Surgeon',
+    degrees: 'MBBS, D.Ortho, DNB',
+    specialization: 'Orthopedics',
+    subSpecialty: 'Joint Sprains & Conservative Fracture Care',
+    experienceYears: 9,
+    hospitalAffiliation: 'Shri Ram Ortho Clinic',
+    city: 'Hyderabad',
+    locality: 'Dilsukhnagar & LB Nagar',
+    pincodes: ['500060', '500074', '500035'],
+    languages: ['English', 'Telugu', 'Hindi'],
+    rating: 4.6,
+    reviewCount: 220,
+    consultationFee: 550,
+    modes: ['Video Call', 'In-Clinic'],
+    availabilityText: 'Slots Available in Evening',
+    isNhealthVerified: false,
+    isNhealthBadged: false,
+    isPremiumEmpaneled: false,
+    profileImage: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80',
+    bio: 'Independent orthopedic practitioner focusing on sprain management, conservative plastering follow-up, and lifestyle ergonomics.',
   },
 
   // General Medicine & Infectious Disease
@@ -146,6 +198,7 @@ export const EMPANELED_DOCTORS: EmpaneledDoctor[] = [
     modes: ['Home Visit', 'Video Call', 'In-Clinic'],
     availabilityText: 'Instant Video / Home Visit in 30 Mins',
     isNhealthVerified: true,
+    isNhealthBadged: true,
     isPremiumEmpaneled: true,
     profileImage: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=400&q=80',
     bio: '17+ years managing seasonal febrile illnesses, viral fever triage, diabetic ketoacidosis prevention, and rapid doorstep clinical checkups.',
@@ -170,9 +223,34 @@ export const EMPANELED_DOCTORS: EmpaneledDoctor[] = [
     modes: ['Home Visit', 'Video Call'],
     availabilityText: 'Available Today · Immediate Dispatch',
     isNhealthVerified: true,
+    isNhealthBadged: true,
     isPremiumEmpaneled: true,
     profileImage: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&w=400&q=80',
     bio: 'Dedicated family medicine practitioner with comprehensive expertise in elderly fever monitoring, home antibiotic therapy, and lab results correlation.',
+  },
+  {
+    id: 'DOC-GEN-REG-01',
+    name: 'Dr. Harish K. Gupta',
+    title: 'General Physician & Family Clinician',
+    degrees: 'MBBS, Fellowship in Non-Invasive Medicine',
+    specialization: 'General Medicine',
+    subSpecialty: 'Viral Flu, Cough & Routine Checkups',
+    experienceYears: 8,
+    hospitalAffiliation: 'LifeCare Family Clinic',
+    city: 'Hyderabad',
+    locality: 'Kacheguda & Barkatpura',
+    pincodes: ['500027', '500001'],
+    languages: ['English', 'Hindi', 'Telugu'],
+    rating: 4.58,
+    reviewCount: 190,
+    consultationFee: 450,
+    modes: ['Video Call', 'In-Clinic'],
+    availabilityText: 'Available Today · Tele-OPD',
+    isNhealthVerified: false,
+    isNhealthBadged: false,
+    isPremiumEmpaneled: false,
+    profileImage: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=400&q=80',
+    bio: 'General physician catering to day-to-day acute flu episodes, seasonal infections, and preliminary patient consultations.',
   },
 
   // Pulmonology
@@ -596,7 +674,16 @@ export function analyzeSymptoms(
     return { ...doc, recommendationScore: Math.round(score) };
   });
 
-  scoredDoctors.sort((a, b) => (b.recommendationScore || 0) - (a.recommendationScore || 0));
+  scoredDoctors.sort((a, b) => {
+    // 1. Nhealth Badged (Verified) Doctors ALWAYS rank first
+    const aBadged = a.isNhealthBadged !== false && a.isNhealthVerified;
+    const bBadged = b.isNhealthBadged !== false && b.isNhealthVerified;
+    if (aBadged !== bBadged) {
+      return aBadged ? -1 : 1;
+    }
+    // 2. Then by algorithmic recommendation score
+    return (b.recommendationScore || 0) - (a.recommendationScore || 0);
+  });
 
   const bestDoctor = scoredDoctors[0] || null;
 
