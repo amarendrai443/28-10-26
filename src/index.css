@@ -443,3 +443,19 @@ body {
   }
 }
 
+/* Nhealth AI Symptom & Doctor Finder strict 4:2 Aspect Ratio Frame (Mobile & Tablet Viewports: < 1024px) */
+@media (max-width: 1023px) {
+  .symptom-finder-frame,
+  .symptom-doctor-finder-container {
+    aspect-ratio: 4 / 2 !important;
+    width: 100% !important;
+    object-fit: cover !important;
+  }
+}
+@media (min-width: 1024px) {
+  .symptom-doctor-finder-container {
+    aspect-ratio: 4 / 1;
+    width: 100%;
+  }
+}
+

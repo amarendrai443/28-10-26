@@ -223,31 +223,30 @@ export const SymptomDoctorFinder: React.FC<SymptomDoctorFinderProps> = ({
           ========================================================================= */}
       {!isResultsViewActive ? (
         <div
-          style={{ aspectRatio: '4 / 1', minHeight: 'auto' }}
-          className="relative rounded-3xl p-4 sm:p-6 md:p-8 bg-gradient-to-br from-[#00172b] via-[#002742] to-[#003859] text-white shadow-2xl border-2 border-teal-500/40 overflow-hidden aspect-[4/1] flex flex-col justify-between"
+          className="symptom-doctor-finder-container relative rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 md:p-6 lg:p-8 bg-gradient-to-br from-[#00172b] via-[#002742] to-[#003859] text-white shadow-2xl border-2 border-teal-500/40 w-full flex flex-col justify-between overflow-y-auto overflow-x-hidden scrollbar-none transition-all max-lg:aspect-[4/2] max-lg:w-full lg:aspect-[4/1]"
         >
           {/* Ambient high-tech background glow & subtle grid pattern */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Top Corporate Badge & Live AI Indicator */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6 relative z-10">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-950/80 border border-teal-400/50 shadow-inner">
-              <span className="relative flex h-2.5 w-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-5 relative z-10">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-teal-950/80 border border-teal-400/50 shadow-inner">
+              <span className="relative flex h-2 sm:h-2.5 w-2 sm:w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-500"></span>
+                <span className="relative inline-flex rounded-full h-2 sm:h-2.5 w-2 sm:w-2.5 bg-teal-500"></span>
               </span>
-              <span className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-teal-300 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+              <span className="text-[10px] sm:text-xs md:text-[13px] font-black uppercase tracking-wider text-teal-300 flex items-center gap-1 sm:gap-1.5">
+                <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-300" />
                 <span>Nhealth AI Symptom &amp; Doctor Finder</span>
               </span>
             </div>
 
             {/* Location Selection: Combined Auto-Detection ("Use Current Location") + Manual Text Input (City, District, State) */}
-            <div className="flex flex-wrap items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/20">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
-                <MapPin className="w-3.5 h-3.5 text-teal-300 shrink-0" />
-                <span className="hidden sm:inline">Location:</span>
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 bg-white/10 backdrop-blur-md px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-2xl border border-white/20">
+              <div className="flex items-center gap-1 text-[10px] sm:text-xs font-semibold text-slate-200">
+                <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-300 shrink-0" />
+                <span className="hidden xs:inline">Location:</span>
               </div>
 
               {/* Manual text input field allowing customers to type their location (City, District, and State) */}
@@ -255,8 +254,8 @@ export const SymptomDoctorFinder: React.FC<SymptomDoctorFinderProps> = ({
                 type="text"
                 value={locationText}
                 onChange={handleLocationInputChange}
-                placeholder="City, District, and State"
-                className="bg-white/15 focus:bg-white text-white focus:text-slate-900 placeholder:text-slate-300 focus:placeholder:text-slate-400 text-xs font-medium px-2.5 py-1 rounded-xl border border-white/20 focus:border-[#008080] focus:outline-none transition-colors w-40 sm:w-56"
+                placeholder="City, District, State"
+                className="bg-white/15 focus:bg-white text-white focus:text-slate-900 placeholder:text-slate-300 focus:placeholder:text-slate-400 text-[10px] sm:text-xs font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xl border border-white/20 focus:border-[#008080] focus:outline-none transition-colors w-28 xs:w-36 sm:w-52"
                 aria-label="Type your location (City, District, and State)"
               />
 
@@ -265,18 +264,18 @@ export const SymptomDoctorFinder: React.FC<SymptomDoctorFinderProps> = ({
                 type="button"
                 onClick={handleUseCurrentLocation}
                 disabled={isDetectingLocation}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-teal-500/25 hover:bg-teal-500/40 text-teal-200 hover:text-white border border-teal-400/40 text-xs font-bold transition-all cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50"
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-0.5 sm:py-1 rounded-xl bg-teal-500/25 hover:bg-teal-500/40 text-teal-200 hover:text-white border border-teal-400/40 text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50"
                 title="Auto-detect current location via GPS"
               >
                 {isDetectingLocation ? (
                   <>
-                    <span className="w-2 h-2 rounded-full bg-teal-300 animate-ping" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-300 animate-ping" />
                     <span>Detecting...</span>
                   </>
                 ) : (
                   <>
-                    <MapPin className="w-3.5 h-3.5 text-teal-300" />
-                    <span>Use Current Location</span>
+                    <MapPin className="w-3 h-3 text-teal-300" />
+                    <span>Auto-Detect</span>
                   </>
                 )}
               </button>
@@ -284,11 +283,11 @@ export const SymptomDoctorFinder: React.FC<SymptomDoctorFinderProps> = ({
           </div>
 
           {/* Heading */}
-          <div className="mb-5 sm:mb-6 text-left relative z-10">
-            <h3 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-snug">
+          <div className="mb-3 sm:mb-5 text-left relative z-10">
+            <h3 className="text-sm xs:text-base sm:text-xl md:text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-snug">
               Describe Symptoms, Get Instant Clinical Triage &amp; Doorstep Care
             </h3>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1.5 max-w-2xl font-medium leading-relaxed">
+            <p className="text-[10px] xs:text-[11px] sm:text-xs md:text-sm text-slate-300 mt-0.5 sm:mt-1 max-w-2xl font-medium leading-relaxed line-clamp-2 md:line-clamp-none">
               Our clinical AI interprets your health concerns, recommends certified specialist qualifications, maps all 16 doorstep services, and instantly connects you with top empaneled doctors in <span className="text-teal-300 font-bold">{locationText || location.city}</span>.
             </p>
           </div>

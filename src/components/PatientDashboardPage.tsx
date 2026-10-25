@@ -1761,39 +1761,46 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
                 )}
               </div>
 
-              {/* Nhealth AI Symptom & Doctor Finder Section */}
+              {/* Nhealth AI Symptom & Doctor Finder Section (Strict 4:2 Aspect Ratio on Mobile & Tablet Viewports) */}
               <div
-                className={`p-4 sm:p-5 md:p-6 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm w-full ${
+                style={{ width: '100%' }}
+                className={`symptom-finder-frame relative overflow-hidden rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-5 lg:p-6 border flex flex-col justify-between max-lg:aspect-[4/2] max-lg:w-full max-lg:object-cover lg:aspect-auto lg:flex-row lg:items-center gap-2.5 sm:gap-4 shadow-sm w-full transition-all ${
                 isDark
-                  ? 'bg-gradient-to-r from-purple-950/60 via-indigo-950/40 to-[#001c36] border-purple-500/30 text-white'
+                  ? 'bg-gradient-to-r from-purple-950/70 via-indigo-950/50 to-[#001c36] border-purple-500/40 text-white shadow-lg'
                   : 'bg-gradient-to-r from-purple-50 via-teal-50 to-blue-50 border-purple-200 text-slate-800'
               }`}>
-                <div className="flex items-start sm:items-center gap-3.5 min-w-0 w-full sm:w-auto">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 border border-purple-400/30 shadow-xs">
-                    <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
+                {/* Glowing subtle ambient orbs */}
+                <div className="absolute -top-10 -right-10 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="relative z-10 flex items-start sm:items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-xl sm:rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 border border-purple-400/30 shadow-xs">
+                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 animate-pulse" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className={`text-sm sm:text-base font-black ${isDark ? 'text-white' : 'text-[#002b49]'}`}>
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <h4 className={`text-xs sm:text-sm md:text-base font-black truncate ${isDark ? 'text-white' : 'text-[#002b49]'}`}>
                         Nhealth AI Symptom &amp; Doctor Finder
                       </h4>
-                      <span className="text-[9px] sm:text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-400/30 shrink-0">
+                      <span className="text-[8px] sm:text-[9px] md:text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-400/30 shrink-0">
                         AI Clinical Engine
                       </span>
                     </div>
-                    <p className={`text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                    <p className={`text-[10px] sm:text-xs md:text-sm mt-0.5 sm:mt-1 leading-relaxed line-clamp-2 md:line-clamp-none ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       Describe symptoms in natural language. Our clinical engine instantly matches empaneled specialist doctors, home visits, and diagnostics.
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleSelectTab('symptom-finder')}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-[#008080] hover:brightness-110 text-white text-xs sm:text-sm font-bold shadow-md cursor-pointer shrink-0 transition-transform active:scale-95 text-center"
-                >
-                  <span>Launch AI Finder</span>
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
+
+                <div className="relative z-10 pt-1 lg:pt-0 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTab('symptom-finder')}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 lg:px-5 py-1.5 sm:py-2 lg:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-[#008080] hover:brightness-110 active:scale-95 text-white text-[11px] sm:text-xs lg:text-sm font-bold shadow-md cursor-pointer transition-all text-center"
+                  >
+                    <span>Launch AI Finder</span>
+                    <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -2080,6 +2087,44 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {/* TAB: AI SYMPTOM & DOCTOR FINDER */}
+          {activeTab === 'symptom-finder' && (
+            <div className="space-y-6 animate-fade-in w-full max-w-7xl mx-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-sm">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <h3 className={`text-xl sm:text-2xl font-black ${isDark ? 'text-white' : 'text-[#002b49]'}`}>
+                      Nhealth AI Symptom &amp; Doctor Finder
+                    </h3>
+                  </div>
+                  <p className={`text-xs sm:text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Describe your health concerns in natural language to instantly match empaneled specialists, doorstep home visits, and relevant diagnostic lab tests across Hyderabad.
+                  </p>
+                </div>
+
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-300 text-xs font-bold shrink-0 self-start sm:self-auto">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                  <span>AI Clinical Engine Active</span>
+                </div>
+              </div>
+
+              {/* Full Interactive Symptom & Doctor Finder Tool */}
+              <div className="w-full">
+                <SymptomDoctorFinder
+                  onSelectService={(service) => {
+                    handleServiceClick(service.name);
+                  }}
+                  onBookDoctorVisit={(doctor, symptomsText) => {
+                    handleServiceClick('Doctor home visits');
+                  }}
+                />
+              </div>
             </div>
           )}
 
