@@ -67,6 +67,18 @@ import { QuickLookFAB } from './components/QuickLookFAB';
 import { OnlineConsultationPage } from './components/OnlineConsultationPage';
 import { TestimonialsCarousel } from './components/TestimonialsCarousel';
 import { PatientFeedbackModal } from './components/PatientFeedbackModal';
+import { usePatientInactivityRefresh } from './hooks/usePatientInactivityRefresh';
+import {
+  PartnerLogoItem,
+  AccreditationItem,
+  getStoredPartnerLogos,
+  getStoredAccreditations,
+} from './utils/partnerLogosStorage';
+import {
+  MarqueeServiceItem,
+  getStoredMarqueeServices,
+  MARQUEE_SERVICES_UPDATED_EVENT,
+} from './utils/marqueeServicesStorage';
 import {
   PartnerApplication,
   PartnerStatus,
@@ -126,119 +138,20 @@ interface LegacyFeaturedServiceItem {
   image: string;
 }
 
-interface MarqueeServiceItem {
-  id: string;
-  name: string;
-  directUrl: string;
-  localFile: string;
-  pageUrl: string;
-  tagline: string;
-  category: string;
-  icon: React.ElementType;
-  gradient: string;
-}
+// Marquee services are managed dynamically via marqueeServicesStorage.ts
 
-const HERO_MARQUEE_SERVICES: MarqueeServiceItem[] = [
-  {
-    id: 'physiotherapy',
-    name: 'Physiotherapy',
-    directUrl: 'https://i.ibb.co/MD4rcRxf/physiotherapy.png',
-    localFile: '/physiotherapy.png',
-    pageUrl: 'https://ibb.co/Z6P5BhpS',
-    tagline: 'Home Rehabilitation & Mobility Care',
-    category: 'Therapy',
-    icon: Activity,
-    gradient: 'from-[#002b49] to-[#008080]',
-  },
-  {
-    id: 'care-ride',
-    name: 'Nhealth Care Ride',
-    directUrl: 'https://i.ibb.co/HLBmNpxW/nhealth-care-ride.png',
-    localFile: '/nhealth%20care%20ride.png',
-    pageUrl: 'https://ibb.co/TDYzKqbV',
-    tagline: 'Assisted Non-Emergency Medical Transit',
-    category: 'Transit',
-    icon: Car,
-    gradient: 'from-[#003e6b] to-[#0d9488]',
-  },
-  {
-    id: 'teleconsult',
-    name: 'Online Doctor Consultations',
-    directUrl: 'https://i.ibb.co/xKYqBdCf/online-doctor-consultations.png',
-    localFile: '/online%20doctor%20consultations.png',
-    pageUrl: 'https://ibb.co/8nbgftKd',
-    tagline: 'Instant Specialist Video & E-Prescription',
-    category: 'Tele-Health',
-    icon: Video,
-    gradient: 'from-[#002b49] to-[#0284c7]',
-  },
-  {
-    id: 'care-assist',
-    name: 'Care Assist',
-    directUrl: 'https://i.ibb.co/k2fngTSD/nhealth-care-assist.png',
-    localFile: '/nhealth%20care%20assist.png',
-    pageUrl: 'https://ibb.co/RTmnpKD6',
-    tagline: 'Trained Home Attendants & Daily Support',
-    category: 'Personal Care',
-    icon: HeartHandshake,
-    gradient: 'from-[#0a3d66] to-[#0f766e]',
-  },
-  {
-    id: 'home-xray',
-    name: 'Home X-Ray Services',
-    directUrl: 'https://i.ibb.co/wNP3sZ5j/home-X-ray-Services.png',
-    localFile: '/home%20X-ray%20Services.png',
-    pageUrl: 'https://ibb.co/mC218rfg',
-    tagline: 'Portable Digital Radiography At Doorstep',
-    category: 'Imaging',
-    icon: Layers,
-    gradient: 'from-[#0f172a] to-[#008080]',
-  },
-  {
-    id: 'bedside',
-    name: 'Bedside Assistance',
-    directUrl: 'https://i.ibb.co/jZWnsBZY/bedside-assistance.png',
-    localFile: '/bedside%20assistance.png',
-    pageUrl: 'https://ibb.co/Z1Yq7t1r',
-    tagline: 'Compassionate Post-Hospitalization Care',
-    category: 'Nursing',
-    icon: HeartPulse,
-    gradient: 'from-[#002b49] to-[#059669]',
-  },
-  {
-    id: 'premium-opd',
-    name: 'Premium OPD Services',
-    directUrl: 'https://i.ibb.co/xWCH1bq/premium-opd-services.png',
-    localFile: '/premium%20opd%20services.png',
-    pageUrl: 'https://ibb.co/H6FdtyT',
-    tagline: 'Priority Zero-Wait Specialist Clinic Access',
-    category: 'Priority Care',
-    icon: Award,
-    gradient: 'from-[#1e293b] to-[#0d9488]',
-  },
-  {
-    id: 'pharmacy',
-    name: 'Pharmacy Delivery',
-    directUrl: 'https://i.ibb.co/N6DZSZ9q/Pharmacy-to-home.png',
-    localFile: '/Pharmacy%20to%20home.png',
-    pageUrl: 'https://ibb.co/4ZvPdP8L',
-    tagline: 'Direct Temperature-Controlled Medicines',
-    category: 'Pharmacy',
-    icon: Pill,
-    gradient: 'from-[#002b49] to-[#10b981]',
-  },
-  {
-    id: 'prebook-opd',
-    name: 'Pre-Booking OPD',
-    directUrl: 'https://i.ibb.co/BVmgv704/pre-booking-opd-services.png',
-    localFile: '/pre%20booking%20opd%20services.png',
-    pageUrl: 'https://ibb.co/1f39BpFs',
-    tagline: 'Guaranteed Consult Slots & Express Tokens',
-    category: 'Scheduling',
-    icon: CalendarCheck,
-    gradient: 'from-[#00385e] to-[#0284c7]',
-  },
-];
+const MARQUEE_ICON_MAP: Record<string, React.ElementType> = {
+  Activity,
+  Car,
+  Video,
+  HeartHandshake,
+  HeartPulse,
+  Award,
+  Pill,
+  CalendarCheck,
+  Layers,
+  Stethoscope,
+};
 
 const SERVICES: LegacyFeaturedServiceItem[] = [
   {
@@ -358,9 +271,9 @@ export function normalizeRoute(raw: string | null | undefined): RoutePath | null
   }
   if (clean === '' || clean === 'index.html') return 'home';
   if (clean === 'admin' || clean === 'command-control') return 'home';
-  if (clean === 'patient' || clean === 'patient-portal') return 'patient-dashboard';
+  if (clean === 'patient' || clean === 'patient-portal' || clean === 'overview') return 'patient-dashboard';
   if (clean === 'partner' || clean === 'partners') return 'partner-with-us';
-  if (clean === 'enquiry' || clean === 'enquiries') return 'corporate-enquiries';
+  if (clean === 'enquiry' || clean === 'enquiries' || clean === 'corporate') return 'corporate-enquiries';
   if (clean === 'online-consultation' || clean === 'consultation' || clean === 'online-doctor' || clean === 'online-doctor-consultation' || clean === 'doctor-consultation') return 'online-consultation';
   return null;
 }
@@ -368,51 +281,64 @@ export function normalizeRoute(raw: string | null | undefined): RoutePath | null
 export function getRouteFromLocation(): RoutePath {
   if (typeof window === 'undefined') return 'home';
 
-  // 1. Check window.location.hash (e.g. #/patient-dashboard, #patient-dashboard, #teams)
+  // 1. Check logged in user account type: if a Patient session exists, prioritize landing directly on the Patient Overview dashboard
+  try {
+    const savedUser = localStorage.getItem('nhealth_user');
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      if (user?.role === 'Patient' || user?.accountType === 'Patient') {
+        const fromHash = window.location.hash ? normalizeRoute(window.location.hash) : null;
+        const fromPath = window.location.pathname && window.location.pathname !== '/'
+          ? normalizeRoute(window.location.pathname)
+          : null;
+
+        // If explicitly requesting another distinct page during session (e.g. partner-with-us, corporate-enquiries, online-consultation)
+        if (fromHash && fromHash !== 'patient-dashboard' && fromHash !== 'home' && fromHash !== 'dashboard' && fromHash !== 'auth') {
+          return fromHash;
+        }
+        if (fromPath && fromPath !== 'patient-dashboard' && fromPath !== 'home' && fromPath !== 'dashboard' && fromPath !== 'auth') {
+          return fromPath;
+        }
+        // Startup, fresh session, or reopening persistent login session lands directly on patient-dashboard Overview
+        return 'patient-dashboard';
+      }
+      if (user?.role && user.role !== 'Patient') {
+        return 'dashboard';
+      }
+    }
+  } catch {}
+
+  // 2. Check window.location.hash (e.g. #/patient-dashboard, #patient-dashboard, #teams)
   if (window.location.hash) {
     const fromHash = normalizeRoute(window.location.hash);
     if (fromHash) return fromHash;
   }
 
-  // 2. Check window.location.pathname (e.g. /patient-dashboard, /teams)
+  // 3. Check window.location.pathname (e.g. /patient-dashboard, /teams)
   if (window.location.pathname && window.location.pathname !== '/') {
     const fromPath = normalizeRoute(window.location.pathname);
     if (fromPath) return fromPath;
   }
 
-  // 3. Check URL query parameters (e.g. ?p=patient-dashboard or ?route=...)
+  // 4. Check URL query parameters (e.g. ?p=patient-dashboard or ?route=...)
   try {
     const params = new URLSearchParams(window.location.search);
     const qRoute = normalizeRoute(params.get('route') || params.get('p') || params.get('page'));
     if (qRoute) return qRoute;
   } catch {}
 
-  // 4. Check localStorage for persisted active route
+  // 5. Check localStorage for persisted active route
   try {
     const savedLocal = localStorage.getItem('nhealth_active_route');
     const validLocal = normalizeRoute(savedLocal);
     if (validLocal) return validLocal;
   } catch {}
 
-  // 5. Check sessionStorage for fallback
+  // 6. Check sessionStorage for fallback
   try {
     const savedSession = sessionStorage.getItem('nhealth_active_route');
     const validSession = normalizeRoute(savedSession);
     if (validSession) return validSession;
-  } catch {}
-
-  // 6. Check logged in user account type
-  try {
-    const savedUser = localStorage.getItem('nhealth_user');
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      if (user?.role === 'Patient' || user?.accountType === 'Patient') {
-        return 'patient-dashboard';
-      }
-      if (user?.role) {
-        return 'dashboard';
-      }
-    }
   } catch {}
 
   return 'home';
@@ -451,12 +377,23 @@ export default function App() {
     const initial = getRouteFromLocation();
     if (typeof window !== 'undefined') {
       try {
+        const savedUser = localStorage.getItem('nhealth_user');
+        if (savedUser) {
+          const user = JSON.parse(savedUser);
+          if (user?.role === 'Patient' || user?.accountType === 'Patient') {
+            localStorage.setItem('nhealth_patient_tab', 'overview');
+            sessionStorage.setItem('nhealth_patient_tab', 'overview');
+          }
+        }
         localStorage.setItem('nhealth_active_route', initial);
         sessionStorage.setItem('nhealth_active_route', initial);
       } catch {}
     }
     return initial;
   });
+
+  // 8-Minute Inactivity Auto-Refresh: If patient exits, switches apps, or remains idle for >= 8 mins, auto-refresh and land on Overview
+  usePatientInactivityRefresh(isLoggedIn && (currentUser?.role === 'Patient' || currentUser?.accountType === 'Patient'));
 
   // Floating Exit Toast prompt for root page gradual exit
   const [showExitPrompt, setShowExitPrompt] = useState(false);
@@ -606,6 +543,30 @@ export default function App() {
     return () => window.removeEventListener('nhealth_enquiries_updated', handleEnquiriesUpdated);
   }, []);
 
+  // Diagnostic Partner Logos & Accreditations Store
+  const [partnerLogos, setPartnerLogos] = useState<PartnerLogoItem[]>(getStoredPartnerLogos);
+  const [accreditationBadges, setAccreditationBadges] = useState<AccreditationItem[]>(getStoredAccreditations);
+
+  useEffect(() => {
+    const handleLogosUpdated = () => setPartnerLogos(getStoredPartnerLogos());
+    const handleAccredUpdated = () => setAccreditationBadges(getStoredAccreditations());
+    window.addEventListener('nhealth_partner_logos_updated', handleLogosUpdated);
+    window.addEventListener('nhealth_accreditations_updated', handleAccredUpdated);
+    return () => {
+      window.removeEventListener('nhealth_partner_logos_updated', handleLogosUpdated);
+      window.removeEventListener('nhealth_accreditations_updated', handleAccredUpdated);
+    };
+  }, []);
+
+  // Comprehensive On-Demand Healthcare Services Marquee Store
+  const [marqueeServices, setMarqueeServices] = useState<MarqueeServiceItem[]>(getStoredMarqueeServices);
+
+  useEffect(() => {
+    const handleMarqueeSync = () => setMarqueeServices(getStoredMarqueeServices());
+    window.addEventListener(MARQUEE_SERVICES_UPDATED_EVENT, handleMarqueeSync);
+    return () => window.removeEventListener(MARQUEE_SERVICES_UPDATED_EVENT, handleMarqueeSync);
+  }, []);
+
   // Keep empaneled live doctors in sync with live partners on mount
   useEffect(() => {
     partners.forEach((p) => {
@@ -683,9 +644,13 @@ export default function App() {
     setCurrentUser(user);
     try {
       localStorage.setItem('nhealth_user', JSON.stringify(user));
+      localStorage.setItem('nhealth_patient_tab', 'overview');
+      sessionStorage.setItem('nhealth_patient_tab', 'overview');
+      localStorage.setItem('nhealth_active_route', 'patient-dashboard');
+      sessionStorage.setItem('nhealth_active_route', 'patient-dashboard');
     } catch {}
     if (user.role === 'Patient' || user.accountType === 'Patient') {
-      navigateTo('patient-dashboard', '/patient-dashboard');
+      navigateTo('patient-dashboard', '/patient-dashboard#overview');
     } else {
       navigateTo('dashboard', '/dashboard');
     }
@@ -1259,12 +1224,37 @@ export default function App() {
     }
   };
 
+  // Unified Online Doctor Consultation Detector across Guest & Patient flows
+  const isOnlineDoctorConsultation = (serviceIdentifier?: string | null): boolean => {
+    if (!serviceIdentifier) return false;
+    const clean = serviceIdentifier.trim().toLowerCase().replace(/[-_]/g, ' ');
+    return (
+      clean === 'online doctor' ||
+      clean === 'online consultation' ||
+      clean === 'online doctor consultation' ||
+      clean === 'online doctor consultations' ||
+      clean === 'instant doctor' ||
+      clean === 'consultation' ||
+      clean === 'teleconsult' ||
+      clean === 'teleconsultation' ||
+      clean === 'tele consult' ||
+      clean === 'tele consultation' ||
+      clean === 'doctor consultation' ||
+      clean === 'doctor consultations' ||
+      clean.includes('online doctor') ||
+      clean.includes('online consult') ||
+      clean.includes('teleconsult') ||
+      clean.includes('instant doctor') ||
+      clean.includes('doctor consult')
+    );
+  };
+
   const openBookingFor = (serviceName: string) => {
-    const sNameLower = serviceName.toLowerCase();
-    if (sNameLower.includes('online doctor') || sNameLower.includes('teleconsult')) {
+    if (isOnlineDoctorConsultation(serviceName)) {
       navigateTo('online-consultation', '/online-consultation');
       return;
     }
+    const sNameLower = serviceName.toLowerCase();
     setBookingServiceType(serviceName);
     const matched = EXTRACTED_SERVICES.find(
       (s) =>
@@ -1363,7 +1353,13 @@ export default function App() {
     return (
       <>
         <OnlineConsultationPage
-          onBackToHome={() => navigateTo('home', '/')}
+          onBackToHome={() => {
+            if (isLoggedIn && (currentUser?.role === 'Patient' || currentUser?.accountType === 'Patient')) {
+              navigateTo('patient-dashboard', '/patient-dashboard#overview');
+            } else {
+              navigateTo('home', '/');
+            }
+          }}
           onBookDoctor={(doctor, mode) => {
             const matchedService = EXTRACTED_SERVICES.find((s) => s.id === 'online-doctor') || EXTRACTED_SERVICES[0];
             setSelectedServiceForBooking(matchedService);
@@ -1522,8 +1518,10 @@ export default function App() {
     );
   }
 
-  // Triplicate items array for bidirectional seamless infinite marquee loop & drag wrapping
-  const marqueeItems = [...HERO_MARQUEE_SERVICES, ...HERO_MARQUEE_SERVICES, ...HERO_MARQUEE_SERVICES];
+  // Triplicate active items array for bidirectional seamless infinite marquee loop & drag wrapping
+  const activeMarqueeList = marqueeServices.filter((s) => s.active !== false);
+  const effectiveMarqueeList = activeMarqueeList.length > 0 ? activeMarqueeList : marqueeServices;
+  const marqueeItems = [...effectiveMarqueeList, ...effectiveMarqueeList, ...effectiveMarqueeList];
 
   return (
     <div className="min-h-screen bg-white text-slate-800 flex flex-col font-sans selection:bg-[#008080]/15 selection:text-[#002b49] w-full max-w-full overflow-x-hidden">
@@ -1673,16 +1671,6 @@ export default function App() {
               About Us
             </a>
             <a
-              href="#teams"
-              onClick={(e) => {
-                e.preventDefault();
-                navigateTo('teams', '#teams');
-              }}
-              className="hover:text-[#008080] transition-colors py-1.5 px-1.5 xl:px-2 rounded-lg whitespace-nowrap shrink-0"
-            >
-              Teams
-            </a>
-            <a
               href="/corporate-enquiries"
               onClick={(e) => {
                 e.preventDefault();
@@ -1690,7 +1678,7 @@ export default function App() {
               }}
               className="hover:text-[#008080] transition-colors py-1.5 px-1.5 xl:px-2 rounded-lg whitespace-nowrap shrink-0"
             >
-              Corporate Enquiries
+              Corporate
             </a>
             <a
               href="#partners"
@@ -2378,147 +2366,148 @@ export default function App() {
           </div>
         </section>
 
-        {/* Seamless Auto-Scrolling Service Banner / Marquee Section */}
-        <section className="bg-gradient-to-b from-[#00172b] via-[#02213a] to-[#f8fafc] pt-7 pb-12 border-b border-slate-200/80">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12">
-
-            <div className="py-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-                <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-950/80 border border-teal-500/40 text-teal-300 text-xs font-bold uppercase tracking-wider shadow-sm">
-                    <Sparkles className="w-3.5 h-3.5 text-teal-300 animate-pulse" />
-                    <span>Comprehensive On-Demand Healthcare Services</span>
-                  </div>
-                </div>
-                <div className="text-xs font-medium text-slate-300 flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Hover to pause · Drag or swipe to explore · Tap/Click to schedule</span>
+        {/* Seamless Auto-Scrolling Service Banner / Marquee Section - Full Viewport Edge-to-Edge */}
+        <section className="w-full bg-gradient-to-b from-[#00172b] via-[#02213a] to-[#f8fafc] pt-7 pb-12 border-b border-slate-200/80 overflow-hidden">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12 mb-3 sm:mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-950/80 border border-teal-500/40 text-teal-300 text-xs font-bold uppercase tracking-wider shadow-sm">
+                  <Sparkles className="w-3.5 h-3.5 text-teal-300 animate-pulse" />
+                  <span>Comprehensive On-Demand Healthcare Services</span>
                 </div>
               </div>
+              <div className="text-xs font-medium text-slate-300 flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>Hover to pause · Drag or swipe to explore · Tap/Click to schedule</span>
+              </div>
+            </div>
+          </div>
 
-              {/* Marquee Wrapper - Auto-scrolls on Desktop & Mobile with Pause-on-hover & Click-Drag */}
-              <div
-                ref={servicesMarqueeRef}
-                onMouseDown={handleMarqueeMouseDown}
-                className={`relative w-full py-2 group overflow-x-auto scrollbar-none select-none [-webkit-overflow-scrolling:touch] ${
-                  isMarqueeGrabbing ? 'cursor-grabbing' : 'cursor-grab'
-                }`}
-                style={{
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none',
-                }}
-              >
-                {/* Unified Continuous Moving Track on Desktop & Mobile */}
-                <div className="w-max flex gap-4 sm:gap-5 px-1">
-                  {marqueeItems.map((item, idx) => {
-                    const IconComponent = item.icon;
-                    return (
+          {/* Edge-to-Edge Fluid Scrolling Marquee Track - Zero Fog & Zero Margin Clipping */}
+          <div
+            ref={servicesMarqueeRef}
+            onMouseDown={handleMarqueeMouseDown}
+            className={`w-full py-2 group overflow-x-auto scrollbar-none select-none [-webkit-overflow-scrolling:touch] ${
+              isMarqueeGrabbing ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
+            style={{
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+            }}
+          >
+            {/* Unified Continuous Moving Track - Full Viewport Width */}
+            <div className="w-max flex gap-3.5 sm:gap-4 md:gap-5 px-3 sm:px-4">
+              {marqueeItems.map((item, idx) => {
+                const IconComponent =
+                  (item.iconName && MARQUEE_ICON_MAP[item.iconName]) ||
+                  (item as any).icon ||
+                  Activity;
+                return (
+                  <div
+                    key={`${item.id}-${idx}`}
+                    role="button"
+                    tabIndex={0}
+                    style={{ aspectRatio: '3 / 2' }}
+                    aria-label={`Book ${item.name}`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openBookingFor(item.name);
+                      }
+                    }}
+                    onClick={() => {
+                      if (!marqueeHasDragged.current) {
+                        openBookingFor(item.name);
+                      }
+                    }}
+                    className="w-[270px] xs:w-[295px] sm:w-[330px] md:w-[360px] aspect-[3/2] shrink-0 bg-white hover:bg-slate-50/95 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-teal-400 transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col p-3 sm:p-3.5 text-left group/card select-none touch-manipulation focus:outline-none focus:ring-2 focus:ring-teal-500 overflow-hidden"
+                  >
+                    {/* Service Image Slot with Fallback Container (52% height of 3:2 card) */}
+                    <div className="relative w-full h-[52%] rounded-xl overflow-hidden bg-slate-900/5 border border-slate-200/90 mb-1.5 flex items-center justify-center select-none pointer-events-none shrink-0">
+                      <img
+                        src={item.directUrl}
+                        alt={item.name}
+                        loading="lazy"
+                        decoding="async"
+                        draggable={false}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105 select-none pointer-events-none"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (!target.dataset.triedLocal && item.localFile) {
+                            target.dataset.triedLocal = 'true';
+                            target.src = item.localFile;
+                          } else {
+                            target.style.display = 'none';
+                            const fallbackEl = target.nextElementSibling as HTMLElement;
+                            if (fallbackEl) {
+                              fallbackEl.classList.remove('hidden');
+                              fallbackEl.classList.add('flex');
+                            }
+                          }
+                        }}
+                      />
+                      {/* Rich Stylized Visual Fallback Container */}
                       <div
-                        key={`${item.id}-${idx}`}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Book ${item.name}`}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            openBookingFor(item.name);
-                          }
-                        }}
-                        onClick={() => {
-                          if (!marqueeHasDragged.current) {
-                            openBookingFor(item.name);
-                          }
-                        }}
-                        className="w-[260px] sm:w-[285px] shrink-0 bg-white hover:bg-slate-50/90 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-teal-400 transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col p-4 text-left group/card select-none touch-manipulation focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        className={`absolute inset-0 hidden flex-col items-center justify-center bg-gradient-to-br ${item.gradient || 'from-[#002b49] to-[#008080]'} p-3 text-center`}
                       >
-                        {/* Service Image Slot with Fallback Container */}
-                        <div className="relative w-full h-36 sm:h-40 rounded-xl overflow-hidden bg-slate-900/5 border border-slate-200/90 mb-3 flex items-center justify-center select-none pointer-events-none">
-                          <img
-                            src={item.directUrl}
-                            alt={item.name}
-                            loading="lazy"
-                            decoding="async"
-                            draggable={false}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105 select-none pointer-events-none"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              if (!target.dataset.triedLocal && item.localFile) {
-                                target.dataset.triedLocal = 'true';
-                                target.src = item.localFile;
-                              } else {
-                                target.style.display = 'none';
-                                const fallbackEl = target.nextElementSibling as HTMLElement;
-                                if (fallbackEl) {
-                                  fallbackEl.classList.remove('hidden');
-                                  fallbackEl.classList.add('flex');
-                                }
-                              }
-                            }}
-                          />
-                          {/* Rich Stylized Visual Fallback Container */}
-                          <div
-                            className={`absolute inset-0 hidden flex-col items-center justify-center bg-gradient-to-br ${item.gradient} p-4 text-center`}
-                          >
-                            <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center text-white mb-2 shadow-sm">
-                              <IconComponent className="w-5 h-5" />
-                            </div>
-                            <span className="text-xs font-bold text-white tracking-wide">
-                              {item.name}
-                            </span>
-                          </div>
-
-                          {/* Category Tag */}
-                          <div className="absolute top-2.5 left-2.5 bg-[#002b49]/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
-                            <IconComponent className="w-3 h-3 text-teal-300" />
-                            <span>{item.category}</span>
-                          </div>
+                        <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center text-white mb-1 shadow-sm">
+                          <IconComponent className="w-4 h-4" />
                         </div>
-
-                        {/* Service Info Underneath */}
-                        <div className="flex-1 flex flex-col justify-between">
-                          <div>
-                            <h4 className="text-sm font-bold text-[#002b49] group-hover/card:text-[#008080] transition-colors leading-snug line-clamp-1">
-                              {item.name}
-                            </h4>
-                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-1 line-clamp-2 min-h-[32px]">
-                              {item.tagline}
-                            </p>
-                          </div>
-
-                          {/* Action Buttons & Triggers */}
-                          <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openBookingFor(item.name);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-[#008080] text-[#008080] hover:text-white text-xs font-bold transition-all shadow-2xs group-hover/card:bg-[#008080] group-hover/card:text-white cursor-pointer active:scale-95"
-                              title={`Book ${item.name}`}
-                            >
-                              <span>Book Visit</span>
-                              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/card:translate-x-1" />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                scrollToServicesGrid();
-                              }}
-                              className="text-[11px] font-semibold text-slate-500 hover:text-[#008080] transition-colors px-2 py-1 rounded-md hover:bg-slate-100/80 cursor-pointer"
-                              title="Explore in Services Catalog"
-                            >
-                              Explore &rarr;
-                            </button>
-                          </div>
-                        </div>
+                        <span className="text-[11px] font-bold text-white tracking-wide">
+                          {item.name}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+
+                      {/* Category Tag */}
+                      <div className="absolute top-2 left-2 bg-[#002b49]/90 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
+                        <IconComponent className="w-2.5 h-2.5 text-teal-300" />
+                        <span>{item.category}</span>
+                      </div>
+                    </div>
+
+                    {/* Service Info Underneath */}
+                    <div className="flex-1 flex flex-col justify-between min-h-0">
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-bold text-[#002b49] group-hover/card:text-[#008080] transition-colors leading-snug truncate">
+                          {item.name}
+                        </h4>
+                        <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight mt-0.5 line-clamp-1">
+                          {item.tagline}
+                        </p>
+                      </div>
+
+                      {/* Action Buttons & Triggers */}
+                      <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openBookingFor(item.name);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-teal-50 hover:bg-[#008080] text-[#008080] hover:text-white text-[11px] sm:text-xs font-bold transition-all shadow-2xs group-hover/card:bg-[#008080] group-hover/card:text-white cursor-pointer active:scale-95"
+                          title={`Book ${item.name}`}
+                        >
+                          <span>Book Visit</span>
+                          <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform group-hover/card:translate-x-1" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            scrollToServicesGrid();
+                          }}
+                          className="text-[10px] sm:text-[11px] font-semibold text-slate-500 hover:text-[#008080] transition-colors px-1.5 py-1 rounded-md hover:bg-slate-100/80 cursor-pointer"
+                          title="Explore in Services Catalog"
+                        >
+                          Explore &rarr;
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -2530,6 +2519,10 @@ export default function App() {
             <div id="symptom-doctor-finder" className="scroll-mt-24">
               <SymptomDoctorFinder
                 onSelectService={(service, prefill) => {
+                  if (isOnlineDoctorConsultation(service.id) || isOnlineDoctorConsultation(service.name)) {
+                    navigateTo('online-consultation', '/online-consultation');
+                    return;
+                  }
                   setSelectedServiceForBooking(service);
                   if (prefill?.symptoms) {
                     setCustomPrefillSymptoms(prefill.symptoms);
@@ -2580,7 +2573,7 @@ export default function App() {
             {/* Interactive 16-Service Buttons Grid: Exact Images & Names from https://ibb.co/4wQnyzJB */}
             <ServiceButtonsGrid
               onSelectService={(service) => {
-                if (service.id === 'online-doctor' || service.name.toLowerCase().includes('online doctor')) {
+                if (isOnlineDoctorConsultation(service.id) || isOnlineDoctorConsultation(service.name)) {
                   navigateTo('online-consultation', '/online-consultation');
                   return;
                 }
@@ -2768,6 +2761,10 @@ export default function App() {
         {/* Universal Healthcare Network Search Filter */}
         <UniversalSearchFilter
           onSelectService={(service, prefill) => {
+            if (isOnlineDoctorConsultation(service.id) || isOnlineDoctorConsultation(service.name)) {
+              navigateTo('online-consultation', '/online-consultation');
+              return;
+            }
             setSelectedServiceForBooking(service);
             if (prefill?.symptoms) {
               setCustomPrefillSymptoms(prefill.symptoms);
@@ -2788,7 +2785,7 @@ export default function App() {
         {/* Partners Section */}
         <section id="partners" className="py-20 lg:py-24 bg-[#f8fafc] border-y border-slate-200 scroll-mt-20">
           <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <div className="text-center max-w-2xl mx-auto mb-14">
+            <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-14">
               <div className="text-xs font-semibold uppercase tracking-wider text-[#008080] mb-2">
                 Trusted Network
               </div>
@@ -2799,30 +2796,52 @@ export default function App() {
                 Nhealth™ collaborates with premier laboratories, verified medical institutions, and certified pharmaceutical networks to guarantee clinical integrity.
               </p>
             </div>
+          </div>
 
-            {/* Smooth Continuous Horizontal Scrolling Ticker / Slider (Left to Right) */}
-            <div className="relative w-full overflow-hidden py-4 sm:py-6">
-              {/* Soft Gradient Mask for seamless infinite flow */}
-              <div className="absolute left-0 inset-y-0 w-16 sm:w-28 bg-gradient-to-r from-[#f8fafc] to-transparent z-10 pointer-events-none" />
-              <div className="absolute right-0 inset-y-0 w-16 sm:w-28 bg-gradient-to-l from-[#f8fafc] to-transparent z-10 pointer-events-none" />
+          {/* Smooth Continuous Horizontal Scrolling Ticker / Slider (Left to Right) - 100% Edge-to-Edge Without Fog Effect */}
+          <div className="w-full overflow-hidden py-4 sm:py-6 mb-2 sm:mb-4">
+            <div className="animate-ticker-ltr flex items-center">
+              {[...Array(10)].flatMap(() => {
+                const activeList = partnerLogos.filter((l) => l.active);
+                return activeList.length > 0 ? activeList : partnerLogos;
+              }).map((logo, idx) => (
+                <div
+                  key={`${logo.id}-${idx}`}
+                  className="flex items-center justify-center h-28 sm:h-36 md:h-40 px-8 sm:px-12 py-3 bg-white rounded-2xl border border-slate-200/90 shadow-sm mx-4 sm:mx-6 shrink-0"
+                >
+                  <img
+                    src={logo.src}
+                    alt={logo.name}
+                    className="h-16 sm:h-22 md:h-26 w-auto object-contain max-w-[200px] sm:max-w-[260px]"
+                    onError={(e) => {
+                      if (logo.fallback) e.currentTarget.src = logo.fallback;
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
 
-              <div className="animate-ticker-ltr flex items-center">
-                {[...Array(10)].flatMap(() => DIAGNOSTIC_PARTNER_LOGOS).map((logo, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-center h-28 sm:h-36 md:h-40 px-8 sm:px-12 py-3 bg-white rounded-2xl border border-slate-200/90 shadow-sm mx-4 sm:mx-6 shrink-0"
-                  >
-                    <img
-                      src={logo.src}
-                      alt={logo.name}
-                      className="h-16 sm:h-22 md:h-26 w-auto object-contain max-w-[200px] sm:max-w-[260px]"
-                      onError={(e) => {
-                        e.currentTarget.src = logo.fallback;
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
+          {/* Full-Width (Edge-to-Edge) Dark Silver Accreditations Scrolling Bar (Strict 10:0.5 Aspect Ratio) */}
+          <div
+            style={{ aspectRatio: '10 / 0.5' }}
+            className="w-full aspect-[10/0.5] min-h-[30px] sm:min-h-[36px] md:min-h-[42px] bg-[#2a2f38] border-t border-slate-600/50 shadow-inner overflow-hidden flex items-center relative select-none"
+          >
+            {/* Edge gradient blending */}
+            <div className="absolute left-0 inset-y-0 w-8 sm:w-16 bg-gradient-to-r from-[#2a2f38] to-transparent z-10 pointer-events-none" />
+            <div className="absolute right-0 inset-y-0 w-8 sm:w-16 bg-gradient-to-l from-[#2a2f38] to-transparent z-10 pointer-events-none" />
+
+            {/* Continuous Left-to-Right Scrolling White Text at 50% reduced speed */}
+            <div className="animate-accreditations-ticker flex items-center whitespace-nowrap text-white font-black tracking-widest text-[10px] sm:text-xs md:text-sm uppercase py-0.5">
+              {[...Array(12)].flatMap(() => {
+                const activeAcc = accreditationBadges.filter((a) => a.active);
+                return activeAcc.length > 0 ? activeAcc : accreditationBadges;
+              }).map((acc, idx) => (
+                <span key={idx} className="mx-6 sm:mx-10 md:mx-12 flex items-center gap-2.5 sm:gap-3 text-slate-100 drop-shadow-xs">
+                  <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-slate-300" />
+                  <span>{acc.name}</span>
+                </span>
+              ))}
             </div>
           </div>
         </section>
@@ -3402,7 +3421,7 @@ export default function App() {
                     onChange={(e) => setBookingServiceType(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#008080] bg-white font-semibold text-[#002b49]"
                   >
-                    {HERO_MARQUEE_SERVICES.map((s) => (
+                    {marqueeServices.map((s) => (
                       <option key={s.id} value={s.name}>
                         {s.name}
                       </option>
@@ -4106,20 +4125,6 @@ export default function App() {
                     Contact Us
                   </a>
                 </li>
-                <li className="pt-2 border-t border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => navigateTo('command-center', '/command-center')}
-                    className="text-slate-400 hover:text-teal-300 transition-colors text-left cursor-pointer flex items-center gap-1.5 text-xs group"
-                    title="Temporary Admin Access for Testing (/command-center)"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-teal-400/80 group-hover:text-teal-300 transition-colors" />
-                    <span>Admin Portal</span>
-                    <span className="text-[9.5px] px-1.5 py-0.5 bg-white/5 group-hover:bg-teal-500/20 text-slate-400 group-hover:text-teal-300 rounded font-mono border border-white/10">
-                      Testing
-                    </span>
-                  </button>
-                </li>
               </ul>
             </div>
 
@@ -4161,18 +4166,6 @@ export default function App() {
               <p className="text-teal-400 font-semibold tracking-wide text-[11px]">
                 Designed &amp; Developed and Owned by Nhealth Unified Healthcare Technologies Private Limited
               </p>
-              <div className="pt-1 flex items-center justify-center md:justify-start">
-                <button
-                  type="button"
-                  onClick={() => navigateTo('command-center', '/command-center')}
-                  className="text-[11px] text-slate-400 hover:text-teal-300 transition-colors inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 cursor-pointer"
-                  title="Temporary Admin Access for Testing"
-                >
-                  <ShieldCheck className="w-3 h-3 text-teal-400" />
-                  <span>Admin Login</span>
-                  <span className="text-[9px] text-teal-300 font-mono">(Testing)</span>
-                </button>
-              </div>
             </div>
 
             {/* Social Media Links (Bottom Right Corner - Requirement 1) */}

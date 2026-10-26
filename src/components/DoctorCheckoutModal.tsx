@@ -253,15 +253,16 @@ export const DoctorCheckoutModal: React.FC<DoctorCheckoutModalProps> = ({
     }
   };
 
-  // Auto-run 6-second scan ticker when on 'vitals_scan'
+  // Auto-run 60-second MediaPipe vital scan ticker when on 'vitals_scan'
+  const PRE_SCAN_DURATION_SECONDS = 60;
   useEffect(() => {
     if (step !== 'vitals_scan') return;
 
     const interval = setInterval(() => {
       setScanSecondsElapsed((prev) => {
         const next = prev + 1;
-        setLiveBpmTicker(72 + Math.floor(Math.sin(next) * 4));
-        if (next >= 6) {
+        setLiveBpmTicker(72 + Math.floor(Math.sin(next * 0.35) * 4));
+        if (next >= PRE_SCAN_DURATION_SECONDS) {
           clearInterval(interval);
           completeVitalsScan();
         }
@@ -824,7 +825,7 @@ export const DoctorCheckoutModal: React.FC<DoctorCheckoutModalProps> = ({
                 Record Vitals Before Connecting
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-                Nhealth Vital Lens™ allows you to capture your contactless vital signs (Heart Rate, SpO2, Blood Pressure) via camera in 6 seconds so Dr. {doctor.name} has your live clinical baseline.
+                Nhealth Vital Lens™ (MediaPipe Clinical Scan) allows you to capture your contactless vital signs (Heart Rate, SpO2, Blood Pressure, Respiration) via camera in 60 seconds so Dr. {doctor.name} has your accurate clinical baseline.
               </p>
             </div>
 
@@ -855,7 +856,7 @@ export const DoctorCheckoutModal: React.FC<DoctorCheckoutModalProps> = ({
                 className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-[#008080] to-emerald-600 hover:from-[#006666] hover:to-emerald-700 text-white font-black text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Camera className="w-4 h-4" />
-                <span>Open Camera &amp; Record Vitals Now</span>
+                <span>Open Camera &amp; Record Vitals Now (60s)</span>
               </button>
 
               <button
@@ -870,22 +871,28 @@ export const DoctorCheckoutModal: React.FC<DoctorCheckoutModalProps> = ({
         )}
 
         {/* ============================================================== */}
-        {/* STEP 3: VITAL LENS AUTO-SCAN CAM VIEW (6-SECOND RAPID CHECK) */}
+        {/* STEP 3: VITAL LENS AUTO-SCAN CAM VIEW (60-SECOND CLINICAL SCAN) */}
         {/* ============================================================== */}
         {step === 'vitals_scan' && (
           <div className="p-5 sm:p-7 space-y-5 text-center my-auto">
             <div className="flex items-center justify-between">
               <div className="text-left">
-                <span className="text-[10px] font-black uppercase tracking-wider text-[#008080]">
-                  Vital Lens™ Active Facial Scan
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#008080] flex items-center gap-1">
+                  <Activity className="w-3 h-3 text-[#008080] animate-pulse" />
+                  <span>MediaPipe Vital Lens™ 60s Clinical Scan</span>
                 </span>
                 <h4 className="text-base font-black text-[#002b49]">
-                  Position Your Face In Center
+                  Hold Still · Centered Facial Capture
                 </h4>
               </div>
-              <span className="text-xs font-mono font-bold bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg">
-                {scanSecondsElapsed}s / 6s
-              </span>
+              <div className="text-right">
+                <span className="text-xs font-mono font-bold bg-teal-50 text-[#008080] border border-teal-200 px-2.5 py-1 rounded-lg">
+                  {scanSecondsElapsed}s / 60s
+                </span>
+                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                  {Math.max(0, 60 - scanSecondsElapsed)}s remaining
+                </div>
+              </div>
             </div>
 
             {/* Camera Viewfinder Box */}
@@ -921,22 +928,35 @@ export const DoctorCheckoutModal: React.FC<DoctorCheckoutModalProps> = ({
               <div className="absolute bottom-3 right-3 bg-slate-900/80 backdrop-blur-xs text-white px-3 py-1.5 rounded-xl border border-teal-500/40 text-right">
                 <div className="text-[9px] text-teal-300 uppercase font-black">Analyzing Signal</div>
                 <div className="text-xs font-mono font-bold">
-                  {Math.min(Math.round((scanSecondsElapsed / 6) * 100), 100)}%
+                  {Math.min(Math.round((scanSecondsElapsed / 60) * 100), 100)}%
                 </div>
               </div>
             </div>
 
-            {/* Progress Bar */}
+            {/* Progress Bar & Phase Status */}
             <div className="space-y-1.5">
               <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-[#008080] to-emerald-500 transition-all duration-300"
-                  style={{ width: `${Math.min((scanSecondsElapsed / 6) * 100, 100)}%` }}
+                  className="h-full bg-gradient-to-r from-[#008080] via-teal-500 to-emerald-500 transition-all duration-300"
+                  style={{ width: `${Math.min((scanSecondsElapsed / 60) * 100, 100)}%` }}
                 />
               </div>
-              <p className="text-xs text-slate-500">
-                Hold still for a few seconds. Readings will be attached directly to your consultation payload.
-              </p>
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="text-[11px] font-medium text-teal-700">
+                  {scanSecondsElapsed < 12
+                    ? 'MediaPipe face mesh locked. Calibrating capillary ROI...'
+                    : scanSecondsElapsed < 28
+                    ? 'Sampling green-channel photoplethysmography (vPPG)...'
+                    : scanSecondsElapsed < 44
+                    ? 'Measuring Inter-Beat Intervals (IBI) & Heart Rate Variability...'
+                    : scanSecondsElapsed < 55
+                    ? 'Computing arterial SpO2 & hemodynamic curve...'
+                    : 'Finalizing 60s clinical biometric baseline...'}
+                </span>
+                <span className="font-mono text-[10px] text-slate-400">
+                  {Math.min(Math.round((scanSecondsElapsed / 60) * 100), 100)}%
+                </span>
+              </div>
             </div>
           </div>
         )}

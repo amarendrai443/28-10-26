@@ -58,7 +58,8 @@ import {
   Tag,
   Percent,
   MessageSquare,
-  Star
+  Star,
+  Award
 } from 'lucide-react';
 
 import {
@@ -125,6 +126,10 @@ import {
   resetStoredPromotions,
   DEFAULT_PROMOTIONS
 } from '../utils/promotionsStorage';
+import { AdminPartnersManager } from './AdminPartnersManager';
+import { getStoredPartnerLogos, getStoredAccreditations } from '../utils/partnerLogosStorage';
+import { AdminMarqueeServicesManager } from './AdminMarqueeServicesManager';
+import { getStoredMarqueeServices, MARQUEE_SERVICES_UPDATED_EVENT } from '../utils/marqueeServicesStorage';
 
 interface AdminDashboardPageProps {
   partners: PartnerApplication[];
@@ -136,7 +141,7 @@ interface AdminDashboardPageProps {
   onNavigateOnboarding: () => void;
 }
 
-type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials';
+type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials' | 'PartnerLogos' | 'MarqueeServices';
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   partners,
@@ -161,9 +166,32 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // Partner Logos & Accreditations Counts
+  const [partnerLogosCount, setPartnerLogosCount] = useState(() => getStoredPartnerLogos().length);
+  const [accreditationsCount, setAccreditationsCount] = useState(() => getStoredAccreditations().length);
+
+  React.useEffect(() => {
+    const handleSyncLogos = () => setPartnerLogosCount(getStoredPartnerLogos().length);
+    const handleSyncAccred = () => setAccreditationsCount(getStoredAccreditations().length);
+    window.addEventListener('nhealth_partner_logos_updated', handleSyncLogos);
+    window.addEventListener('nhealth_accreditations_updated', handleSyncAccred);
+    return () => {
+      window.removeEventListener('nhealth_partner_logos_updated', handleSyncLogos);
+      window.removeEventListener('nhealth_accreditations_updated', handleSyncAccred);
+    };
+  }, []);
+
+  // Marquee Services Count
+  const [marqueeCount, setMarqueeCount] = useState(() => getStoredMarqueeServices().length);
+  React.useEffect(() => {
+    const handleSyncMarquee = () => setMarqueeCount(getStoredMarqueeServices().length);
+    window.addEventListener(MARQUEE_SERVICES_UPDATED_EVENT, handleSyncMarquee);
+    return () => window.removeEventListener(MARQUEE_SERVICES_UPDATED_EVENT, handleSyncMarquee);
+  }, []);
+
   // Dashboard Filters & UI State (Phase 3 Alignment: 4 Primary Buckets)
   const [searchQuery, setSearchQuery] = useState('');
-  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials'];
+  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials', 'PartnerLogos', 'MarqueeServices'];
   const [rawAlignmentTab, setRawAlignmentTab] = useState<AlignmentTab>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '') as AlignmentTab;
@@ -1903,11 +1931,65 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   </span>
                 )}
               </button>
+
+              {/* Tab 10: Partner Showcase & Accreditations Marquee */}
+              <button
+                type="button"
+                onClick={() => setAlignmentTab('PartnerLogos')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                  alignmentTab === 'PartnerLogos'
+                    ? 'bg-teal-700 text-white shadow-xs'
+                    : 'bg-teal-50 hover:bg-teal-100 text-teal-950 border border-teal-200'
+                }`}
+              >
+                <Award className="w-3.5 h-3.5" />
+                <span>Partners &amp; Accreditations</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    alignmentTab === 'PartnerLogos'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-teal-200 text-teal-900'
+                  }`}
+                >
+                  {partnerLogosCount} Logos
+                </span>
+              </button>
+
+              {/* Tab 11: Comprehensive Services Marquee */}
+              <button
+                type="button"
+                onClick={() => setAlignmentTab('MarqueeServices')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                  alignmentTab === 'MarqueeServices'
+                    ? 'bg-teal-700 text-white shadow-xs'
+                    : 'bg-teal-50 hover:bg-teal-100 text-teal-950 border border-teal-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-teal-500" />
+                <span>Services Marquee (3:2)</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    alignmentTab === 'MarqueeServices'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-teal-200 text-teal-900'
+                  }`}
+                >
+                  {marqueeCount} Cards
+                </span>
+              </button>
             </div>
 
             {/* Quick Count Badge */}
             <div className="text-xs text-slate-500 font-medium">
-              {alignmentTab === 'VitalScans' ? (
+              {alignmentTab === 'MarqueeServices' ? (
+                <span>
+                  Comprehensive Services Marquee: <strong>{marqueeCount} Service Cards (Strict 3:2 Ratio)</strong>
+                </span>
+              ) : alignmentTab === 'PartnerLogos' ? (
+                <span>
+                  Showcase: <strong>{partnerLogosCount} Logos</strong> • {accreditationsCount} Accreditations in 10:1 Marquee
+                </span>
+              ) : alignmentTab === 'VitalScans' ? (
                 <span>
                   Showing <strong>{filteredVitalScans.length}</strong> of {vitalScans.length} vital scans
                 </span>
@@ -2200,9 +2282,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         </div>
 
         {/* ------------------------------------------------------------- */}
-        {/* TAB PANELS: ADVERTISING, VITAL SCANS, GUEST BOOKINGS, ENQUIRIES, OR PARTNERS */}
+        {/* TAB PANELS: PARTNER LOGOS, ADVERTISING, VITAL SCANS, GUEST BOOKINGS, ENQUIRIES, OR PARTNERS */}
         {/* ------------------------------------------------------------- */}
-        {alignmentTab === 'Advertising' ? (
+        {alignmentTab === 'MarqueeServices' ? (
+          <AdminMarqueeServicesManager />
+        ) : alignmentTab === 'PartnerLogos' ? (
+          <AdminPartnersManager />
+        ) : alignmentTab === 'Advertising' ? (
           <div className="space-y-6 animate-fade-in">
             {/* Header & Dimensions Recommendation Card */}
             <div className="bg-gradient-to-r from-indigo-900 via-[#002b49] to-slate-900 text-white p-5 sm:p-6 rounded-3xl border border-indigo-500/30 shadow-xl space-y-4">

@@ -55,6 +55,7 @@ import { SymptomDoctorFinder } from './SymptomDoctorFinder';
 import { InteractiveGridTabs } from './InteractiveGridTabs';
 import { getStoredGridTabs, GridTabItem } from '../utils/gridTabsStorage';
 import { getStoredPromotions, PromotionItem } from '../utils/promotionsStorage';
+import { usePatientInactivityRefresh } from '../hooks/usePatientInactivityRefresh';
 
 // Realistic vector wallet logo with multi-tone leather gradient, fine perimeter stitching, card slots & metallic snap clasp
 export const RealisticWalletLogo: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -348,8 +349,17 @@ export const ResponsiveBannerCarousel: React.FC<ResponsiveBannerCarouselProps> =
           return (
             <div
               key={banner.id}
+              onClick={() => onServiceClick(banner.ctaLink)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onServiceClick(banner.ctaLink);
+                }
+              }}
               aria-hidden={!isCurrent}
-              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+              className={`absolute inset-0 transition-opacity duration-700 ease-in-out cursor-pointer ${
                 isCurrent ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'
               }`}
             >
@@ -479,15 +489,11 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
     'profile',
   ];
 
-  // Refresh State Persistence: restore active tab from URL hash, localStorage, or sessionStorage
+  // Default landing route upon startup and login: always land directly on 'overview'
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as DashboardTab;
       if (hash && VALID_TABS.includes(hash)) return hash;
-      const savedLocal = localStorage.getItem('nhealth_patient_tab') as DashboardTab;
-      if (savedLocal && VALID_TABS.includes(savedLocal)) return savedLocal;
-      const savedSession = sessionStorage.getItem('nhealth_patient_tab') as DashboardTab;
-      if (savedSession && VALID_TABS.includes(savedSession)) return savedSession;
     }
     return 'overview';
   });
@@ -531,6 +537,9 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
     window.addEventListener('popstate', handleTabPopState);
     return () => window.removeEventListener('popstate', handleTabPopState);
   }, [activeTab]);
+
+  // 8-Minute Inactivity Auto-Refresh: Detect background/idle >= 8 mins and auto-refresh directly to Overview
+  usePatientInactivityRefresh(true);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -776,6 +785,31 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
     }
   };
 
+  // Unified Online Doctor Consultation Detector across Guest & Patient flows
+  const isOnlineDoctorConsultation = (serviceIdentifier?: string | null): boolean => {
+    if (!serviceIdentifier) return false;
+    const clean = serviceIdentifier.trim().toLowerCase().replace(/[-_]/g, ' ');
+    return (
+      clean === 'online doctor' ||
+      clean === 'online consultation' ||
+      clean === 'online doctor consultation' ||
+      clean === 'online doctor consultations' ||
+      clean === 'instant doctor' ||
+      clean === 'consultation' ||
+      clean === 'teleconsult' ||
+      clean === 'teleconsultation' ||
+      clean === 'tele consult' ||
+      clean === 'tele consultation' ||
+      clean === 'doctor consultation' ||
+      clean === 'doctor consultations' ||
+      clean.includes('online doctor') ||
+      clean.includes('online consult') ||
+      clean.includes('teleconsult') ||
+      clean.includes('instant doctor') ||
+      clean.includes('doctor consult')
+    );
+  };
+
   const handleServiceClick = (service: string) => {
     if (service === 'vital-lens') {
       if (onOpenVitalLens) onOpenVitalLens();
@@ -793,6 +827,10 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
     if (targetLink === 'vital-lens') {
       if (onOpenVitalLens) onOpenVitalLens();
       handleSelectTab('vital-lens');
+      return;
+    }
+    if (isOnlineDoctorConsultation(targetLink)) {
+      handleServiceClick(targetLink);
       return;
     }
     if (VALID_TABS.includes(targetLink as DashboardTab)) {
@@ -2164,7 +2202,16 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
                 {EXTRACTED_SERVICES.map((service, idx) => (
                   <div
                     key={service.id}
-                    className={`group flex flex-col rounded-xl sm:rounded-2xl border transition-all duration-300 p-2 sm:p-3 md:p-3.5 justify-between hover:shadow-xl ${
+                    onClick={() => handleServiceClick(service.id || service.name)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleServiceClick(service.id || service.name);
+                      }
+                    }}
+                    className={`group flex flex-col rounded-xl sm:rounded-2xl border transition-all duration-300 p-2 sm:p-3 md:p-3.5 justify-between hover:shadow-xl cursor-pointer select-none active:scale-[0.99] ${
                       isDark
                         ? 'bg-[#00172d] border-cyan-900/40 hover:border-cyan-500/60 shadow-lg'
                         : 'bg-white border-slate-200/90 hover:border-[#008080] shadow-2xs'
@@ -2215,7 +2262,10 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
                     <div className="pt-2 sm:pt-3 mt-auto">
                       <button
                         type="button"
-                        onClick={() => handleServiceClick(service.name)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleServiceClick(service.id || service.name);
+                        }}
                         className="w-full py-1.5 sm:py-2.5 px-2 sm:px-2.5 rounded-xl bg-gradient-to-r from-[#008080] to-[#009b9b] hover:from-[#006666] hover:to-[#008080] text-white font-bold text-[10px] sm:text-xs shadow-md shadow-teal-950/20 hover:shadow-teal-900/40 active:scale-[0.98] transition-all cursor-pointer border border-teal-400/30 flex items-center justify-center gap-1 sm:gap-1.5 text-center"
                       >
                         <span className="whitespace-nowrap">Book Service</span>
