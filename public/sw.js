@@ -80,3 +80,62 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// ==========================================
+// WEB PUSH NOTIFICATIONS EVENT LISTENERS
+// ==========================================
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data = { title: 'Nhealth Alert', body: event.data.text() };
+    }
+  }
+
+  const title = data.title || 'Nhealth™ Healthcare Notification';
+  const options = {
+    body: data.body || 'You have an important healthcare notification from Nhealth.',
+    icon: data.icon || '/splash-logo.png',
+    badge: data.badge || '/favicon-32x32.png',
+    image: data.imageUrl || data.image,
+    vibrate: [100, 50, 100],
+    data: {
+      url: data.targetUrl || data.url || '/patient-dashboard#overview',
+    },
+    actions: [
+      { action: 'open', title: 'Open Nhealth' },
+      { action: 'dismiss', title: 'Dismiss' }
+    ]
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  if (event.action === 'dismiss') {
+    return;
+  }
+
+  const targetUrl = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          if (client.url.includes(targetUrl) || client.url === targetUrl) {
+            return client.focus();
+          }
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+

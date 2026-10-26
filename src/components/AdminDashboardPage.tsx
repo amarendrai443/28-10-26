@@ -133,6 +133,8 @@ import { getStoredPartnerLogos, getStoredAccreditations } from '../utils/partner
 import { AdminMarqueeServicesManager } from './AdminMarqueeServicesManager';
 import { AdminServicesManager } from './AdminServicesManager';
 import { getStoredMarqueeServices, MARQUEE_SERVICES_UPDATED_EVENT } from '../utils/marqueeServicesStorage';
+import { AdminPushNotificationsManager } from './AdminPushNotificationsManager';
+import { getStoredPushNotifications, PUSH_NOTIFICATIONS_UPDATED_EVENT } from '../utils/pushNotificationStorage';
 
 interface AdminDashboardPageProps {
   partners: PartnerApplication[];
@@ -144,7 +146,7 @@ interface AdminDashboardPageProps {
   onNavigateOnboarding: () => void;
 }
 
-type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials' | 'PartnerLogos' | 'MarqueeServices' | 'Services' | 'Partners' | 'Accreditations';
+type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials' | 'PartnerLogos' | 'MarqueeServices' | 'Services' | 'Partners' | 'Accreditations' | 'PushNotifications';
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   partners,
@@ -192,9 +194,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     return () => window.removeEventListener(MARQUEE_SERVICES_UPDATED_EVENT, handleSyncMarquee);
   }, []);
 
+  // Push Notifications Count
+  const [pushCount, setPushCount] = useState(() => getStoredPushNotifications().length);
+  React.useEffect(() => {
+    const handleSyncPush = () => setPushCount(getStoredPushNotifications().length);
+    window.addEventListener(PUSH_NOTIFICATIONS_UPDATED_EVENT, handleSyncPush);
+    return () => window.removeEventListener(PUSH_NOTIFICATIONS_UPDATED_EVENT, handleSyncPush);
+  }, []);
+
   // Dashboard Filters & UI State (Phase 3 Alignment: 4 Primary Buckets)
   const [searchQuery, setSearchQuery] = useState('');
-  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials', 'PartnerLogos', 'MarqueeServices', 'Services', 'Partners', 'Accreditations'];
+  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials', 'PartnerLogos', 'MarqueeServices', 'Services', 'Partners', 'Accreditations', 'PushNotifications'];
   const [rawAlignmentTab, setRawAlignmentTab] = useState<AlignmentTab>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '') as AlignmentTab;
@@ -1779,6 +1789,34 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               Continuous Slow Gliding
             </span>
           </div>
+
+          {/* Card 13: Push Notifications */}
+          <div
+            onClick={() => setAlignmentTab('PushNotifications')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md ${
+              alignmentTab === 'PushNotifications'
+                ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-500/30'
+                : 'bg-white border-slate-200 hover:border-purple-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-purple-950 uppercase tracking-wider block">
+                Push Alerts
+              </span>
+              <Bell className="w-4 h-4 text-purple-600" />
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-xl font-black text-purple-800">
+                {pushCount}
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-900">
+                Web Push
+              </span>
+            </div>
+            <span className="text-[10.5px] text-purple-800 font-medium mt-0.5 block truncate">
+              Immediate &amp; Scheduled
+            </span>
+          </div>
         </div>
 
         {/* ------------------------------------------------------------- */}
@@ -2085,6 +2123,29 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   }`}
                 >
                   {accreditationsCount} Badges
+                </span>
+              </button>
+
+              {/* Dedicated Tab: Push Notifications & Scheduling */}
+              <button
+                type="button"
+                onClick={() => setAlignmentTab('PushNotifications')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                  alignmentTab === 'PushNotifications'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-200'
+                }`}
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>Push Notifications</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    alignmentTab === 'PushNotifications'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-purple-200 text-purple-900'
+                  }`}
+                >
+                  {pushCount} Alerts
                 </span>
               </button>
             </div>
@@ -2400,6 +2461,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           <AdminPartnersLogosManager />
         ) : alignmentTab === 'Accreditations' ? (
           <AdminAccreditationsManager />
+        ) : alignmentTab === 'PushNotifications' ? (
+          <AdminPushNotificationsManager />
         ) : alignmentTab === 'Advertising' ? (
           <div className="space-y-6 animate-fade-in">
             {/* Header & Dimensions Recommendation Card */}
