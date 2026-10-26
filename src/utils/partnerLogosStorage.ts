@@ -157,3 +157,13 @@ export function moveAccreditationOrder(id: string, direction: 'up' | 'down'): vo
   const reordered = sorted.map((item, index) => ({ ...item, order: index + 1 }));
   saveStoredAccreditations(reordered);
 }
+
+export function resetPartnerLogos(): PartnerLogoItem[] {
+  saveStoredPartnerLogos(INITIAL_PARTNER_LOGOS);
+  return INITIAL_PARTNER_LOGOS;
+}
+
+export function resetAccreditations(): AccreditationItem[] {
+  saveStoredAccreditations(INITIAL_ACCREDITATIONS);
+  return INITIAL_ACCREDITATIONS;
+}

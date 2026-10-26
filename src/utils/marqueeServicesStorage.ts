@@ -5,9 +5,11 @@ export interface MarqueeServiceItem {
   localFile?: string;
   pageUrl?: string;
   tagline: string;
+  description?: string;
   category: string;
   iconName?: string;
   gradient?: string;
+  aspectRatio?: string; // Strict 3:2 aspect ratio setting
   active?: boolean;
 }
 

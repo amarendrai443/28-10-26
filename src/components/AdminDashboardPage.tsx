@@ -127,8 +127,11 @@ import {
   DEFAULT_PROMOTIONS
 } from '../utils/promotionsStorage';
 import { AdminPartnersManager } from './AdminPartnersManager';
+import { AdminPartnersLogosManager } from './AdminPartnersLogosManager';
+import { AdminAccreditationsManager } from './AdminAccreditationsManager';
 import { getStoredPartnerLogos, getStoredAccreditations } from '../utils/partnerLogosStorage';
 import { AdminMarqueeServicesManager } from './AdminMarqueeServicesManager';
+import { AdminServicesManager } from './AdminServicesManager';
 import { getStoredMarqueeServices, MARQUEE_SERVICES_UPDATED_EVENT } from '../utils/marqueeServicesStorage';
 
 interface AdminDashboardPageProps {
@@ -141,7 +144,7 @@ interface AdminDashboardPageProps {
   onNavigateOnboarding: () => void;
 }
 
-type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials' | 'PartnerLogos' | 'MarqueeServices';
+type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials' | 'PartnerLogos' | 'MarqueeServices' | 'Services' | 'Partners' | 'Accreditations';
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   partners,
@@ -191,7 +194,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   // Dashboard Filters & UI State (Phase 3 Alignment: 4 Primary Buckets)
   const [searchQuery, setSearchQuery] = useState('');
-  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials', 'PartnerLogos', 'MarqueeServices'];
+  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials', 'PartnerLogos', 'MarqueeServices', 'Services', 'Partners', 'Accreditations'];
   const [rawAlignmentTab, setRawAlignmentTab] = useState<AlignmentTab>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '') as AlignmentTab;
@@ -1692,6 +1695,90 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               {flaggedCount > 0 ? '⚠️ AI Danger Alert pending' : 'Auto-moderated live feed'}
             </span>
           </div>
+
+          {/* Card 10: Services (3:2) */}
+          <div
+            onClick={() => setAlignmentTab('Services')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md ${
+              alignmentTab === 'Services' || alignmentTab === 'MarqueeServices'
+                ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/30'
+                : 'bg-white border-slate-200 hover:border-teal-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-teal-950 uppercase tracking-wider block">
+                Services (3:2)
+              </span>
+              <Sparkles className="w-4 h-4 text-teal-600" />
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-xl font-black text-teal-800">
+                {marqueeCount}
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-900">
+                Live Strip
+              </span>
+            </div>
+            <span className="text-[10.5px] text-teal-800 font-medium mt-0.5 block truncate">
+              3:2 Aspect Ratio Cards
+            </span>
+          </div>
+
+          {/* Card 11: Partners */}
+          <div
+            onClick={() => setAlignmentTab('Partners')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md ${
+              alignmentTab === 'Partners' || alignmentTab === 'PartnerLogos'
+                ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/30'
+                : 'bg-white border-slate-200 hover:border-teal-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-teal-950 uppercase tracking-wider block">
+                Partners
+              </span>
+              <Building2 className="w-4 h-4 text-teal-600" />
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-xl font-black text-teal-800">
+                {partnerLogosCount}
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-900">
+                Network
+              </span>
+            </div>
+            <span className="text-[10.5px] text-teal-800 font-medium mt-0.5 block truncate">
+              Edge-to-Edge Boards
+            </span>
+          </div>
+
+          {/* Card 12: Accreditations (10:0.5) */}
+          <div
+            onClick={() => setAlignmentTab('Accreditations')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md ${
+              alignmentTab === 'Accreditations'
+                ? 'bg-slate-100 border-slate-600 ring-2 ring-slate-400/30'
+                : 'bg-white border-slate-200 hover:border-slate-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block">
+                Accreditations
+              </span>
+              <Award className="w-4 h-4 text-slate-600" />
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-xl font-black text-slate-900">
+                {accreditationsCount}
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-800">
+                10:0.5 Bar
+              </span>
+            </div>
+            <span className="text-[10.5px] text-slate-600 font-medium mt-0.5 block truncate">
+              Continuous Slow Gliding
+            </span>
+          </div>
         </div>
 
         {/* ------------------------------------------------------------- */}
@@ -1932,21 +2019,44 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 )}
               </button>
 
-              {/* Tab 10: Partner Showcase & Accreditations Marquee */}
+              {/* Dedicated Tab: Comprehensive Services (3:2) */}
               <button
                 type="button"
-                onClick={() => setAlignmentTab('PartnerLogos')}
+                onClick={() => setAlignmentTab('Services')}
                 className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                  alignmentTab === 'PartnerLogos'
+                  alignmentTab === 'Services' || alignmentTab === 'MarqueeServices'
                     ? 'bg-teal-700 text-white shadow-xs'
                     : 'bg-teal-50 hover:bg-teal-100 text-teal-950 border border-teal-200'
                 }`}
               >
-                <Award className="w-3.5 h-3.5" />
-                <span>Partners &amp; Accreditations</span>
+                <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                <span>Services (3:2)</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                    alignmentTab === 'PartnerLogos'
+                    alignmentTab === 'Services' || alignmentTab === 'MarqueeServices'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-teal-200 text-teal-900'
+                  }`}
+                >
+                  {marqueeCount} Services
+                </span>
+              </button>
+
+              {/* Dedicated Tab: Our Healthcare & Diagnostic Partners */}
+              <button
+                type="button"
+                onClick={() => setAlignmentTab('Partners')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                  alignmentTab === 'Partners' || alignmentTab === 'PartnerLogos'
+                    ? 'bg-teal-700 text-white shadow-xs'
+                    : 'bg-teal-50 hover:bg-teal-100 text-teal-950 border border-teal-200'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Partners</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    alignmentTab === 'Partners' || alignmentTab === 'PartnerLogos'
                       ? 'bg-white/20 text-white'
                       : 'bg-teal-200 text-teal-900'
                   }`}
@@ -1955,26 +2065,26 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </span>
               </button>
 
-              {/* Tab 11: Comprehensive Services Marquee */}
+              {/* Dedicated Tab: Accreditations Bar (10:0.5) */}
               <button
                 type="button"
-                onClick={() => setAlignmentTab('MarqueeServices')}
+                onClick={() => setAlignmentTab('Accreditations')}
                 className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                  alignmentTab === 'MarqueeServices'
-                    ? 'bg-teal-700 text-white shadow-xs'
-                    : 'bg-teal-50 hover:bg-teal-100 text-teal-950 border border-teal-200'
+                  alignmentTab === 'Accreditations'
+                    ? 'bg-slate-800 text-white shadow-xs border border-slate-600'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300'
                 }`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-teal-500" />
-                <span>Services Marquee (3:2)</span>
+                <Award className="w-3.5 h-3.5" />
+                <span>Accreditations (10:0.5)</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                    alignmentTab === 'MarqueeServices'
+                    alignmentTab === 'Accreditations'
                       ? 'bg-white/20 text-white'
-                      : 'bg-teal-200 text-teal-900'
+                      : 'bg-slate-200 text-slate-800'
                   }`}
                 >
-                  {marqueeCount} Cards
+                  {accreditationsCount} Badges
                 </span>
               </button>
             </div>
@@ -2282,12 +2392,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         </div>
 
         {/* ------------------------------------------------------------- */}
-        {/* TAB PANELS: PARTNER LOGOS, ADVERTISING, VITAL SCANS, GUEST BOOKINGS, ENQUIRIES, OR PARTNERS */}
+        {/* TAB PANELS: SERVICES, PARTNERS, ACCREDITATIONS, ADVERTISING, VITAL SCANS, GUEST BOOKINGS, ENQUIRIES, OR PARTNERS */}
         {/* ------------------------------------------------------------- */}
-        {alignmentTab === 'MarqueeServices' ? (
-          <AdminMarqueeServicesManager />
-        ) : alignmentTab === 'PartnerLogos' ? (
-          <AdminPartnersManager />
+        {alignmentTab === 'Services' || alignmentTab === 'MarqueeServices' ? (
+          <AdminServicesManager />
+        ) : alignmentTab === 'Partners' || alignmentTab === 'PartnerLogos' ? (
+          <AdminPartnersLogosManager />
+        ) : alignmentTab === 'Accreditations' ? (
+          <AdminAccreditationsManager />
         ) : alignmentTab === 'Advertising' ? (
           <div className="space-y-6 animate-fade-in">
             {/* Header & Dimensions Recommendation Card */}
