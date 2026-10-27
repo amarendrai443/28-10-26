@@ -101,7 +101,7 @@ export async function triggerNativeDeviceNotification(
 ): Promise<boolean> {
   if (typeof window === 'undefined') return false;
 
-  const notificationOptions: NotificationOptions = {
+  const notificationOptions: NotificationOptions & { image?: string } = {
     body,
     icon: '/splash-logo.png',
     badge: '/favicon-32x32.png',

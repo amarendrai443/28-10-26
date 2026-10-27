@@ -59,7 +59,8 @@ import {
   Percent,
   MessageSquare,
   Star,
-  Award
+  Award,
+  Bell
 } from 'lucide-react';
 
 import {
