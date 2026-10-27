@@ -64,6 +64,7 @@ import { RoleBasedDashboard } from './components/RoleBasedDashboard';
 import { PatientDashboardPage } from './components/PatientDashboardPage';
 import { VoiceAssistantModal } from './components/VoiceAssistantModal';
 import { QuickLookFAB } from './components/QuickLookFAB';
+import { NotificationPermissionPrompt } from './components/NotificationPermissionPrompt';
 import { OnlineConsultationPage } from './components/OnlineConsultationPage';
 import { TestimonialsCarousel } from './components/TestimonialsCarousel';
 import { PatientFeedbackModal } from './components/PatientFeedbackModal';
@@ -97,6 +98,10 @@ import { ServiceItem, BookingFormData, UserAccount, ConfirmedBooking } from './t
 import { EXTRACTED_SERVICES } from './data/servicesData';
 import { saveGuestBooking } from './utils/patientStorage';
 import { navHistory } from './utils/navigationHistory';
+import {
+  notifyAppointmentConfirmed,
+  checkAndDispatchScheduledNotifications,
+} from './utils/pushNotificationStorage';
 
 const NHEALTH_LOGO_URL = 'https://i.ibb.co/JW6HFRV0/Nhealth-logo-8cm-x-8cm-high-quality-1-1.png';
 const NHEALTH_LOGO_FALLBACK = '/nhealth_logo.png';
@@ -480,6 +485,15 @@ export default function App() {
     };
   }, [currentRoute, isLoggedIn, currentUser]);
 
+  // Automated Web Push Notification Scheduler Queue: checks every 10s for scheduled triggers
+  useEffect(() => {
+    checkAndDispatchScheduledNotifications();
+    const schedulerTimer = setInterval(() => {
+      checkAndDispatchScheduledNotifications();
+    }, 10000);
+    return () => clearInterval(schedulerTimer);
+  }, []);
+
   // Keep URL, localStorage & sessionStorage strictly synchronized on route change
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -557,6 +571,53 @@ export default function App() {
       window.removeEventListener('nhealth_accreditations_updated', handleAccredUpdated);
     };
   }, []);
+
+  // Dynamic constant linear scroll speed (px-per-sec) for Partner Logos & Accreditations Marquees
+  const partnerTrackRef = useRef<HTMLDivElement | null>(null);
+  const [partnerScrollDuration, setPartnerScrollDuration] = useState<number>(30);
+
+  const activePartnersList = partnerLogos.filter((l) => l.active);
+  const effectivePartners = activePartnersList.length > 0 ? activePartnersList : partnerLogos;
+  const partnerRepeatCount = Math.max(2, Math.ceil(8 / Math.max(effectivePartners.length, 1)));
+  const singlePartnerSet = Array(partnerRepeatCount).fill(effectivePartners).flat();
+  const partnerMarqueeItems = [...singlePartnerSet, ...singlePartnerSet];
+
+  useEffect(() => {
+    const updatePartnerDuration = () => {
+      if (partnerTrackRef.current) {
+        const halfWidth = partnerTrackRef.current.scrollWidth / 2;
+        const PARTNER_SPEED_PX_PER_SEC = 50;
+        const duration = Math.max(10, Math.round(halfWidth / PARTNER_SPEED_PX_PER_SEC));
+        setPartnerScrollDuration(duration);
+      }
+    };
+    updatePartnerDuration();
+    window.addEventListener('resize', updatePartnerDuration);
+    return () => window.removeEventListener('resize', updatePartnerDuration);
+  }, [partnerLogos]);
+
+  const accreditationsTrackRef = useRef<HTMLDivElement | null>(null);
+  const [accreditationsScrollDuration, setAccreditationsScrollDuration] = useState<number>(35);
+
+  const activeAccList = accreditationBadges.filter((a) => a.active);
+  const effectiveAcc = activeAccList.length > 0 ? activeAccList : accreditationBadges;
+  const accRepeatCount = Math.max(3, Math.ceil(12 / Math.max(effectiveAcc.length, 1)));
+  const singleAccSet = Array(accRepeatCount).fill(effectiveAcc).flat();
+  const accMarqueeItems = [...singleAccSet, ...singleAccSet];
+
+  useEffect(() => {
+    const updateAccDuration = () => {
+      if (accreditationsTrackRef.current) {
+        const halfWidth = accreditationsTrackRef.current.scrollWidth / 2;
+        const ACC_SPEED_PX_PER_SEC = 38;
+        const duration = Math.max(10, Math.round(halfWidth / ACC_SPEED_PX_PER_SEC));
+        setAccreditationsScrollDuration(duration);
+      }
+    };
+    updateAccDuration();
+    window.addEventListener('resize', updateAccDuration);
+    return () => window.removeEventListener('resize', updateAccDuration);
+  }, [accreditationBadges]);
 
   // Comprehensive On-Demand Healthcare Services Marquee Store
   const [marqueeServices, setMarqueeServices] = useState<MarqueeServiceItem[]>(getStoredMarqueeServices);
@@ -1201,6 +1262,7 @@ export default function App() {
     }
 
     setConfirmedBookingData(confirmed);
+    notifyAppointmentConfirmed(confirmed.serviceName, confirmed.referenceId);
     setFeedbackBookingContext({
       serviceName: confirmed.serviceName,
       patientName: confirmed.patientName,
@@ -1420,6 +1482,9 @@ export default function App() {
             setMyBookingsModalOpen(false);
           }}
         />
+
+        {/* Browser Web Push Permission Prompt */}
+        <NotificationPermissionPrompt />
       </>
     );
   }
@@ -1514,6 +1579,9 @@ export default function App() {
           isLoggedIn={isLoggedIn}
           onViewHistory={() => {}}
         />
+
+        {/* Browser Web Push Permission Prompt */}
+        <NotificationPermissionPrompt />
       </>
     );
   }
@@ -2798,13 +2866,14 @@ export default function App() {
             </div>
           </div>
 
-          {/* Smooth Continuous Horizontal Scrolling Ticker / Slider (Left to Right) - 100% Edge-to-Edge Without Fog Effect */}
+          {/* Smooth Continuous Horizontal Scrolling Ticker / Slider (Left to Right) - 100% Edge-to-Edge with Dynamic Constant Speed */}
           <div className="w-full overflow-hidden py-4 sm:py-6 mb-2 sm:mb-4">
-            <div className="animate-ticker-ltr flex items-center">
-              {[...Array(10)].flatMap(() => {
-                const activeList = partnerLogos.filter((l) => l.active);
-                return activeList.length > 0 ? activeList : partnerLogos;
-              }).map((logo, idx) => (
+            <div
+              ref={partnerTrackRef}
+              style={{ animationDuration: `${partnerScrollDuration}s` }}
+              className="animate-ticker-ltr flex items-center"
+            >
+              {partnerMarqueeItems.map((logo, idx) => (
                 <div
                   key={`${logo.id}-${idx}`}
                   className="flex items-center justify-center h-28 sm:h-36 md:h-40 px-8 sm:px-12 py-3 bg-white rounded-2xl border border-slate-200/90 shadow-sm mx-4 sm:mx-6 shrink-0"
@@ -2813,8 +2882,12 @@ export default function App() {
                     src={logo.src}
                     alt={logo.name}
                     className="h-16 sm:h-22 md:h-26 w-auto object-contain max-w-[200px] sm:max-w-[260px]"
+                    referrerPolicy="no-referrer"
+                    loading="eager"
                     onError={(e) => {
-                      if (logo.fallback) e.currentTarget.src = logo.fallback;
+                      if (logo.fallback && e.currentTarget.src !== window.location.origin + logo.fallback) {
+                        e.currentTarget.src = logo.fallback;
+                      }
                     }}
                   />
                 </div>
@@ -2822,7 +2895,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Full-Width (Edge-to-Edge) Dark Silver Accreditations Scrolling Bar (Strict 10:0.5 Aspect Ratio) */}
+          {/* Full-Width (Edge-to-Edge) Dark Silver Accreditations Scrolling Bar (Strict 10:0.5 Aspect Ratio) with Dynamic Constant Speed */}
           <div
             style={{ aspectRatio: '10 / 0.5' }}
             className="w-full aspect-[10/0.5] min-h-[30px] sm:min-h-[36px] md:min-h-[42px] bg-[#2a2f38] border-t border-slate-600/50 shadow-inner overflow-hidden flex items-center relative select-none"
@@ -2831,12 +2904,13 @@ export default function App() {
             <div className="absolute left-0 inset-y-0 w-8 sm:w-16 bg-gradient-to-r from-[#2a2f38] to-transparent z-10 pointer-events-none" />
             <div className="absolute right-0 inset-y-0 w-8 sm:w-16 bg-gradient-to-l from-[#2a2f38] to-transparent z-10 pointer-events-none" />
 
-            {/* Continuous Left-to-Right Scrolling White Text at 50% reduced speed */}
-            <div className="animate-accreditations-ticker flex items-center whitespace-nowrap text-white font-black tracking-widest text-[10px] sm:text-xs md:text-sm uppercase py-0.5">
-              {[...Array(12)].flatMap(() => {
-                const activeAcc = accreditationBadges.filter((a) => a.active);
-                return activeAcc.length > 0 ? activeAcc : accreditationBadges;
-              }).map((acc, idx) => (
+            {/* Continuous Left-to-Right Scrolling White Text at constant linear speed */}
+            <div
+              ref={accreditationsTrackRef}
+              style={{ animationDuration: `${accreditationsScrollDuration}s` }}
+              className="animate-accreditations-ticker flex items-center whitespace-nowrap text-white font-black tracking-widest text-[10px] sm:text-xs md:text-sm uppercase py-0.5"
+            >
+              {accMarqueeItems.map((acc, idx) => (
                 <span key={idx} className="mx-6 sm:mx-10 md:mx-12 flex items-center gap-2.5 sm:gap-3 text-slate-100 drop-shadow-xs">
                   <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-slate-300" />
                   <span>{acc.name}</span>
@@ -4248,6 +4322,9 @@ export default function App() {
         onOpenVitalLens={() => setVitalLensOpen(true)}
         onOpenVoiceAssistant={() => setVoiceAssistantOpen(true)}
       />
+
+      {/* Browser Web Push Permission Prompt */}
+      <NotificationPermissionPrompt />
 
       {/* 1. STARTUP SPLASH SCREEN: Solid Blank White Screen -> Centered Logo + Warm Tagline -> Smooth Fade Out */}
       {splashStep !== 'hidden' && (

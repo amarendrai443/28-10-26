@@ -56,6 +56,7 @@ import { InteractiveGridTabs } from './InteractiveGridTabs';
 import { getStoredGridTabs, GridTabItem } from '../utils/gridTabsStorage';
 import { getStoredPromotions, PromotionItem } from '../utils/promotionsStorage';
 import { usePatientInactivityRefresh } from '../hooks/usePatientInactivityRefresh';
+import { UserNotificationCenter } from './UserNotificationCenter';
 
 // Realistic vector wallet logo with multi-tone leather gradient, fine perimeter stitching, card slots & metallic snap clasp
 export const RealisticWalletLogo: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -192,6 +193,7 @@ interface PatientDashboardPageProps {
 
 type DashboardTab =
   | 'overview'
+  | 'notifications'
   | 'offers'
   | 'symptom-finder'
   | 'quick-booking'
@@ -474,6 +476,7 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
 }) => {
   const VALID_TABS: DashboardTab[] = [
     'overview',
+    'notifications',
     'offers',
     'symptom-finder',
     'quick-booking',
@@ -843,6 +846,12 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
   const navItems = [
     { id: 'overview', label: 'Overview', icon: Activity, badge: null },
     {
+      id: 'notifications',
+      label: 'Notifications',
+      icon: Bell,
+      badge: 'Alerts',
+    },
+    {
       id: 'offers',
       label: 'Offers & Deals',
       icon: Tag,
@@ -1125,6 +1134,20 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
                     </div>
                   ))}
                 </div>
+
+                <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-700/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotificationsOpen(false);
+                      handleSelectTab('notifications');
+                    }}
+                    className="w-full py-2 text-center text-xs font-bold text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 hover:underline cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>Open Full Notifications Inbox</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1405,6 +1428,16 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+          {/* TAB: NOTIFICATIONS CENTER */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-6 animate-fade-in">
+              <UserNotificationCenter
+                userId={currentUser?.id}
+                onNavigateTab={(tab) => handleSelectTab(tab as DashboardTab)}
+              />
+            </div>
+          )}
+
           {/* 2. DUAL INDEPENDENT 4:1 BANNER SECTIONS & GRID TABS */}
           {activeTab === 'overview' && (
             <div className="space-y-4 sm:space-y-6">

@@ -24,6 +24,7 @@ import {
   updatePartnerLogo,
   deletePartnerLogo,
   resetPartnerLogos,
+  normalizeLogoUrl,
 } from '../utils/partnerLogosStorage';
 
 export const AdminPartnersLogosManager: React.FC = () => {
@@ -339,6 +340,8 @@ export const AdminPartnersLogosManager: React.FC = () => {
                           src={logo.src}
                           alt={logo.name}
                           className="h-full w-full object-contain"
+                          referrerPolicy="no-referrer"
+                          loading="eager"
                           onError={(e) => {
                             if (logo.fallback) e.currentTarget.src = logo.fallback;
                           }}
@@ -468,10 +471,12 @@ export const AdminPartnersLogosManager: React.FC = () => {
                     type="url"
                     value={logoForm.src || ''}
                     onChange={(e) => {
-                      setLogoForm((prev) => ({ ...prev, src: e.target.value }));
-                      setLogoPreview(e.target.value);
+                      const val = e.target.value;
+                      const normalized = normalizeLogoUrl(val);
+                      setLogoForm((prev) => ({ ...prev, src: normalized || val }));
+                      setLogoPreview(normalized || val);
                     }}
-                    placeholder="https://..."
+                    placeholder="https://i.ibb.co/... or paste direct image URL"
                     className="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#008080]"
                   />
                   <input
@@ -490,14 +495,19 @@ export const AdminPartnersLogosManager: React.FC = () => {
                     <span>Upload</span>
                   </button>
                 </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Supports direct links from ImgBB (e.g. <span className="font-mono text-teal-700">https://i.ibb.co/...</span>), CDN links, or direct file uploads.
+                </p>
 
                 {logoPreview && (
                   <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-3">
                     <div className="h-16 w-32 bg-white rounded-lg border border-slate-200 p-2 flex items-center justify-center shrink-0">
                       <img
-                        src={logoPreview}
+                        src={normalizeLogoUrl(logoPreview)}
                         alt="Logo Preview"
                         className="h-full w-full object-contain"
+                        referrerPolicy="no-referrer"
+                        loading="eager"
                       />
                     </div>
                     <div className="text-[11px] text-slate-600">

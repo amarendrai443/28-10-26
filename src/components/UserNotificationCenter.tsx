@@ -309,6 +309,9 @@ export const UserNotificationCenter: React.FC<UserNotificationCenterProps> = ({
                   src={selectedNotification.imageUrl}
                   alt={selectedNotification.title}
                   className="w-full h-full object-cover max-h-64"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
                 />
               </div>
             )}

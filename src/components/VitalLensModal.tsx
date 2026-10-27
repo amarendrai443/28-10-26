@@ -30,6 +30,7 @@ import { VitalLensUserData, VitalMetricsResult } from '../types/vitalLens';
 import { VPPGSignalProcessor } from '../utils/vppgEngine';
 import { generateVitalLensPDF } from '../utils/vitalReportGenerator';
 import { saveVitalScan } from '../utils/patientStorage';
+import { notifyVitalScanReady } from '../utils/pushNotificationStorage';
 
 interface VitalLensModalProps {
   isOpen: boolean;
@@ -751,6 +752,7 @@ export const VitalLensModal: React.FC<VitalLensModalProps> = ({
         ? `GUEST-${(userData.mobileNumber || Date.now().toString()).slice(-6)}`
         : `USR-${(userData.mobileNumber || 'PATIENT').slice(-6)}`;
       saveVitalScan(metrics, userData, scanMode, scanUserId);
+      notifyVitalScanReady(`HR ${metrics.heartRate} BPM, SpO2 ${metrics.oxygenSaturation}%, BP ${metrics.bloodPressureSystolic}/${metrics.bloodPressureDiastolic} mmHg`);
       setCurrentStep(5);
 
       // Upon completion of the face scan, generate and trigger a downloadable PDF report

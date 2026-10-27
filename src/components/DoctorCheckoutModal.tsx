@@ -36,6 +36,10 @@ import {
   WhatsAppReceiptPayload,
 } from '../utils/whatsappDispatch';
 import { ConsultationVideoRoom } from './ConsultationVideoRoom';
+import {
+  notifyAppointmentConfirmed,
+  notifyDoctorJoined,
+} from '../utils/pushNotificationStorage';
 
 interface DoctorCheckoutModalProps {
   doctor: EmpaneledDoctor | null;
@@ -349,6 +353,9 @@ export const DoctorCheckoutModal: React.FC<DoctorCheckoutModalProps> = ({
       onConsultationConfirmed(updatedSession);
     }
 
+    // Trigger Native Web Push notification for appointment confirmation
+    notifyAppointmentConfirmed(`Consultation with ${doctor.name}`, session.referenceId);
+
     // Auto-dismiss notification toasts
     setTimeout(() => {
       setDoctorNotifiedToast(false);
@@ -362,6 +369,8 @@ export const DoctorCheckoutModal: React.FC<DoctorCheckoutModalProps> = ({
     setTimeout(() => {
       setDoctorAcceptedCall(true);
       playDoctorPing();
+      // Trigger Native Web Push notification when doctor connects to consultation
+      notifyDoctorJoined(doctor.name, session.referenceId);
     }, 5500);
   };
 

@@ -69,10 +69,33 @@ export function saveStoredPartnerLogos(logos: PartnerLogoItem[]): void {
   } catch {}
 }
 
+/**
+ * Normalizes direct image URLs (such as ImgBB i.ibb.co links, protocol-relative URLs,
+ * and standard external links) ensuring instant loading and no broken images.
+ */
+export function normalizeLogoUrl(rawUrl?: string): string {
+  if (!rawUrl) return '';
+  let url = rawUrl.trim();
+  url = url.replace(/^['"`]|['"`]$/g, '');
+  if (!url) return '';
+
+  if (url.startsWith('//')) {
+    return 'https:' + url;
+  }
+  if (/^(i\.ibb\.co|ibb\.co|images\.unsplash\.com)\//i.test(url)) {
+    return 'https://' + url;
+  }
+  if (!/^https?:\/\//i.test(url) && !url.startsWith('data:') && !url.startsWith('/')) {
+    return 'https://' + url;
+  }
+  return url;
+}
+
 export function addPartnerLogo(data: Omit<PartnerLogoItem, 'id' | 'createdAt'>): PartnerLogoItem {
   const current = getStoredPartnerLogos();
   const newItem: PartnerLogoItem = {
     ...data,
+    src: normalizeLogoUrl(data.src),
     id: 'partner-' + Date.now(),
     createdAt: new Date().toISOString(),
   };
@@ -83,7 +106,15 @@ export function addPartnerLogo(data: Omit<PartnerLogoItem, 'id' | 'createdAt'>):
 
 export function updatePartnerLogo(id: string, updates: Partial<PartnerLogoItem>): void {
   const current = getStoredPartnerLogos();
-  const updated = current.map((item) => (item.id === id ? { ...item, ...updates } : item));
+  const updated = current.map((item) =>
+    item.id === id
+      ? {
+          ...item,
+          ...updates,
+          src: updates.src !== undefined ? normalizeLogoUrl(updates.src) : item.src,
+        }
+      : item
+  );
   saveStoredPartnerLogos(updated);
 }
 

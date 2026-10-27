@@ -293,6 +293,35 @@ export function removeNotificationFromUserInbox(notificationId: string, userId?:
 }
 
 /**
+ * Register or retrieve Web Push Subscription with Service Worker PushManager
+ */
+export async function registerPushSubscription(): Promise<PushSubscription | null> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return null;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      try {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+        });
+      } catch {
+        // Safe fallback for environments where push service server key is mock
+      }
+    }
+    if (sub) {
+      localStorage.setItem('nhealth_push_subscription', JSON.stringify(sub));
+    }
+    return sub;
+  } catch (err) {
+    console.warn('Push registration warning:', err);
+    return null;
+  }
+}
+
+/**
  * Request Browser Push Notification Permission
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
@@ -302,6 +331,9 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 
   try {
     const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      await registerPushSubscription();
+    }
     return permission;
   } catch (err) {
     console.error('Error requesting notification permission:', err);
