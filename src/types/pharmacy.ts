@@ -42,3 +42,42 @@ export interface PrescriptionOrder {
   uploadDate: string;
   status: 'Received' | 'Verifying by Pharmacist' | 'Approved' | 'Out for Delivery';
 }
+
+export type PharmacyDeliveryStatus =
+  | 'Order Placed'
+  | 'Packing'
+  | 'Dispatched'
+  | 'Out for Delivery'
+  | 'Delivered';
+
+export type PaymentMethod =
+  | 'UPI'
+  | 'Cards'
+  | 'Net Banking'
+  | 'Cash on Delivery';
+
+export type PaymentStatus = 'Paid' | 'Pending' | 'Refunded';
+
+export interface PharmacyOrder {
+  id: string;
+  orderNumber: string;
+  date: string;
+  time: string;
+  items: PharmacyCartItem[];
+  subtotal: number;
+  deliveryFee: number;
+  discount: number;
+  grandTotal: number;
+  patientName: string;
+  patientPhone: string;
+  deliveryAddress: string;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  deliveryStatus: PharmacyDeliveryStatus;
+  deliveryPartnerName?: string;
+  deliveryPartnerPhone?: string;
+  deliveryOtp?: string;
+  etaMinutes?: number;
+  invoiceNumber: string;
+  temperaturePreserved: boolean;
+}
