@@ -602,10 +602,10 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
           'Doorstep Pharmacy by Nhealth guarantees 100% genuine pharmaceuticals and chronic refill delivery within 2 to 4 hours in temperature-monitored packages.';
       }
       action = {
-        label: 'Order Doorstep Pharmacy',
+        label: 'Open Doorstep Pharmacy',
         onClick: () => {
           onClose();
-          onOpenServiceBooking('Doorstep Pharmacy');
+          onNavigateToRoute('doorstep-pharmacy', '/doorstep-pharmacy');
         },
       };
     }

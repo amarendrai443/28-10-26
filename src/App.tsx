@@ -66,6 +66,7 @@ import { VoiceAssistantModal } from './components/VoiceAssistantModal';
 import { QuickLookFAB } from './components/QuickLookFAB';
 import { NotificationPermissionPrompt } from './components/NotificationPermissionPrompt';
 import { OnlineConsultationPage } from './components/OnlineConsultationPage';
+import { DoorstepPharmacyPage } from './components/DoorstepPharmacyPage';
 import { TestimonialsCarousel } from './components/TestimonialsCarousel';
 import { PatientFeedbackModal } from './components/PatientFeedbackModal';
 import { usePatientInactivityRefresh } from './hooks/usePatientInactivityRefresh';
@@ -254,7 +255,8 @@ type RoutePath =
   | 'dashboard'
   | 'patient-dashboard'
   | 'teams'
-  | 'online-consultation';
+  | 'online-consultation'
+  | 'doorstep-pharmacy';
 
 export const VALID_ROUTES: RoutePath[] = [
   'home',
@@ -266,6 +268,7 @@ export const VALID_ROUTES: RoutePath[] = [
   'patient-dashboard',
   'teams',
   'online-consultation',
+  'doorstep-pharmacy',
 ];
 
 export function normalizeRoute(raw: string | null | undefined): RoutePath | null {
@@ -280,6 +283,7 @@ export function normalizeRoute(raw: string | null | undefined): RoutePath | null
   if (clean === 'partner' || clean === 'partners') return 'partner-with-us';
   if (clean === 'enquiry' || clean === 'enquiries' || clean === 'corporate') return 'corporate-enquiries';
   if (clean === 'online-consultation' || clean === 'consultation' || clean === 'online-doctor' || clean === 'online-doctor-consultation' || clean === 'doctor-consultation') return 'online-consultation';
+  if (clean === 'doorstep-pharmacy' || clean === 'pharmacy' || clean === 'medicines' || clean === 'medicine' || clean === 'online-pharmacy') return 'doorstep-pharmacy';
   return null;
 }
 
@@ -1311,9 +1315,27 @@ export default function App() {
     );
   };
 
+  // Unified Doorstep Pharmacy Detector across Guest & Patient flows
+  const isDoorstepPharmacy = (serviceIdentifier?: string | null): boolean => {
+    if (!serviceIdentifier) return false;
+    const clean = serviceIdentifier.trim().toLowerCase().replace(/[-_]/g, ' ');
+    return (
+      clean === 'doorstep pharmacy' ||
+      clean === 'pharmacy' ||
+      clean === 'pharmacy to home' ||
+      clean === 'doorstep medicines' ||
+      clean.includes('pharmacy') ||
+      clean.includes('medicine')
+    );
+  };
+
   const openBookingFor = (serviceName: string) => {
     if (isOnlineDoctorConsultation(serviceName)) {
       navigateTo('online-consultation', '/online-consultation');
+      return;
+    }
+    if (isDoorstepPharmacy(serviceName)) {
+      navigateTo('doorstep-pharmacy', '/doorstep-pharmacy');
       return;
     }
     const sNameLower = serviceName.toLowerCase();
@@ -1486,6 +1508,21 @@ export default function App() {
         {/* Browser Web Push Permission Prompt */}
         <NotificationPermissionPrompt />
       </>
+    );
+  }
+
+  if (currentRoute === 'doorstep-pharmacy') {
+    return (
+      <DoorstepPharmacyPage
+        onBackToHome={() => {
+          if (isLoggedIn && (currentUser?.role === 'Patient' || currentUser?.accountType === 'Patient')) {
+            navigateTo('patient-dashboard', '/patient-dashboard#overview');
+          } else {
+            navigateTo('home', '/');
+          }
+        }}
+        onOpenBookingModal={(serviceName) => openBookingFor(serviceName)}
+      />
     );
   }
 
@@ -2591,6 +2628,10 @@ export default function App() {
                     navigateTo('online-consultation', '/online-consultation');
                     return;
                   }
+                  if (isDoorstepPharmacy(service.id) || isDoorstepPharmacy(service.name)) {
+                    navigateTo('doorstep-pharmacy', '/doorstep-pharmacy');
+                    return;
+                  }
                   setSelectedServiceForBooking(service);
                   if (prefill?.symptoms) {
                     setCustomPrefillSymptoms(prefill.symptoms);
@@ -2643,6 +2684,10 @@ export default function App() {
               onSelectService={(service) => {
                 if (isOnlineDoctorConsultation(service.id) || isOnlineDoctorConsultation(service.name)) {
                   navigateTo('online-consultation', '/online-consultation');
+                  return;
+                }
+                if (isDoorstepPharmacy(service.id) || isDoorstepPharmacy(service.name)) {
+                  navigateTo('doorstep-pharmacy', '/doorstep-pharmacy');
                   return;
                 }
                 setSelectedServiceForBooking(service);
@@ -2831,6 +2876,10 @@ export default function App() {
           onSelectService={(service, prefill) => {
             if (isOnlineDoctorConsultation(service.id) || isOnlineDoctorConsultation(service.name)) {
               navigateTo('online-consultation', '/online-consultation');
+              return;
+            }
+            if (isDoorstepPharmacy(service.id) || isDoorstepPharmacy(service.name)) {
+              navigateTo('doorstep-pharmacy', '/doorstep-pharmacy');
               return;
             }
             setSelectedServiceForBooking(service);
