@@ -60,9 +60,13 @@ import {
   MessageSquare,
   Star,
   Award,
-  Bell
+  Bell,
+  Cpu,
+  Server,
+  Webhook
 } from 'lucide-react';
 
+import { PartnerApiWebhookSettings } from './PartnerApiWebhookSettings';
 import {
   TestimonialItem,
   getStoredTestimonials,
@@ -147,7 +151,7 @@ interface AdminDashboardPageProps {
   onNavigateOnboarding: () => void;
 }
 
-type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials' | 'PartnerLogos' | 'MarqueeServices' | 'Services' | 'Partners' | 'Accreditations' | 'PushNotifications';
+type AlignmentTab = 'All' | 'Pending' | 'Live' | 'Suspended' | 'HighRisk' | 'Enquiries' | 'VitalScans' | 'GuestBookings' | 'Advertising' | 'Testimonials' | 'PartnerLogos' | 'MarqueeServices' | 'Services' | 'Partners' | 'Accreditations' | 'PushNotifications' | 'PartnerApis';
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   partners,
@@ -203,9 +207,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     return () => window.removeEventListener(PUSH_NOTIFICATIONS_UPDATED_EVENT, handleSyncPush);
   }, []);
 
+  // Confidential Partner API Management State
+  const [adminPartnerApiType, setAdminPartnerApiType] = useState<'pharmacy' | 'lab' | 'hospital' | 'clinic' | 'insurer'>('pharmacy');
+
   // Dashboard Filters & UI State (Phase 3 Alignment: 4 Primary Buckets)
   const [searchQuery, setSearchQuery] = useState('');
-  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials', 'PartnerLogos', 'MarqueeServices', 'Services', 'Partners', 'Accreditations', 'PushNotifications'];
+  const VALID_ADMIN_TABS: AlignmentTab[] = ['All', 'Pending', 'Live', 'Suspended', 'HighRisk', 'Enquiries', 'VitalScans', 'GuestBookings', 'Advertising', 'Testimonials', 'PartnerLogos', 'MarqueeServices', 'Services', 'Partners', 'Accreditations', 'PushNotifications', 'PartnerApis'];
   const [rawAlignmentTab, setRawAlignmentTab] = useState<AlignmentTab>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '') as AlignmentTab;
@@ -1818,6 +1825,40 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               Immediate &amp; Scheduled
             </span>
           </div>
+
+          {/* Card 14: Confidential Partner APIs & Webhooks */}
+          <div
+            onClick={() => setAlignmentTab('PartnerApis')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md ${
+              alignmentTab === 'PartnerApis'
+                ? 'bg-teal-950 text-white border-teal-400 ring-2 ring-teal-400/40'
+                : 'bg-white border-slate-200 hover:border-teal-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className={`text-[11px] font-bold uppercase tracking-wider block ${
+                alignmentTab === 'PartnerApis' ? 'text-teal-300' : 'text-teal-950'
+              }`}>
+                Partner APIs
+              </span>
+              <Cpu className={`w-4 h-4 ${alignmentTab === 'PartnerApis' ? 'text-teal-300' : 'text-teal-600'}`} />
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className={`text-xl font-black ${
+                alignmentTab === 'PartnerApis' ? 'text-white' : 'text-teal-800'
+              }`}>
+                5 Systems
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/30">
+                Confidential
+              </span>
+            </div>
+            <span className={`text-[10.5px] font-medium mt-0.5 block truncate ${
+              alignmentTab === 'PartnerApis' ? 'text-slate-300' : 'text-slate-500'
+            }`}>
+              Webhooks &amp; Gateway
+            </span>
+          </div>
         </div>
 
         {/* ------------------------------------------------------------- */}
@@ -2149,11 +2190,32 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   {pushCount} Alerts
                 </span>
               </button>
+
+              {/* Dedicated Tab: Confidential Partner API & Webhooks */}
+              <button
+                type="button"
+                onClick={() => setAlignmentTab('PartnerApis')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                  alignmentTab === 'PartnerApis'
+                    ? 'bg-teal-900 text-white shadow-xs border border-teal-500'
+                    : 'bg-slate-900 text-teal-300 hover:bg-slate-800 border border-teal-800/40'
+                }`}
+              >
+                <Cpu className="w-3.5 h-3.5 text-teal-400" />
+                <span>Partner APIs &amp; Webhooks</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-teal-500/20 text-teal-300 border border-teal-400/30">
+                  Confidential
+                </span>
+              </button>
             </div>
 
             {/* Quick Count Badge */}
             <div className="text-xs text-slate-500 font-medium">
-              {alignmentTab === 'MarqueeServices' ? (
+              {alignmentTab === 'PartnerApis' ? (
+                <span>
+                  Confidential Module: <strong>Enterprise Partner API &amp; Webhook Engine</strong> (REST Connectors &amp; OAuth 2.0)
+                </span>
+              ) : alignmentTab === 'MarqueeServices' ? (
                 <span>
                   Comprehensive Services Marquee: <strong>{marqueeCount} Service Cards (Strict 3:2 Ratio)</strong>
                 </span>
@@ -2456,7 +2518,53 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         {/* ------------------------------------------------------------- */}
         {/* TAB PANELS: SERVICES, PARTNERS, ACCREDITATIONS, ADVERTISING, VITAL SCANS, GUEST BOOKINGS, ENQUIRIES, OR PARTNERS */}
         {/* ------------------------------------------------------------- */}
-        {alignmentTab === 'Services' || alignmentTab === 'MarqueeServices' ? (
+        {alignmentTab === 'PartnerApis' ? (
+          <div className="space-y-6 animate-fade-in">
+            {/* Header with partner type selector */}
+            <div className="bg-slate-900 text-white p-5 rounded-3xl border border-teal-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-teal-500/20 text-teal-400 flex items-center justify-center border border-teal-500/30 shrink-0">
+                  <Server className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/30">
+                      Restricted Confidential Module
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">OAuth 2.0 / Bearer Auth</span>
+                  </div>
+                  <h3 className="text-lg font-black text-white mt-0.5">Partner API &amp; Webhook Configuration Hub</h3>
+                  <p className="text-xs text-slate-300">
+                    Enterprise connector layer for third-party hospital, lab, pharmacy, clinic, and insurer systems.
+                  </p>
+                </div>
+              </div>
+
+              {/* Partner Type Selector */}
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-800 p-1.5 rounded-2xl border border-slate-700">
+                {(['pharmacy', 'lab', 'hospital', 'clinic', 'insurer'] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setAdminPartnerApiType(type)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer ${
+                      adminPartnerApiType === type
+                        ? 'bg-teal-500 text-slate-950 font-black shadow-xs'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <PartnerApiWebhookSettings
+              partnerType={adminPartnerApiType}
+              partnerName={`Enterprise ${adminPartnerApiType.charAt(0).toUpperCase() + adminPartnerApiType.slice(1)} Network`}
+            />
+          </div>
+        ) : alignmentTab === 'Services' || alignmentTab === 'MarqueeServices' ? (
           <AdminServicesManager />
         ) : alignmentTab === 'Partners' || alignmentTab === 'PartnerLogos' ? (
           <AdminPartnersLogosManager />

@@ -2051,27 +2051,7 @@ export default function App() {
             </button>
 
 
-            {/* Universal API Gateway Dedicated Button */}
-            <button
-              type="button"
-              onClick={() => navigateTo('api-gateway', '/api-gateway')}
-              className="hidden lg:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 xl:px-3 py-1.5 sm:py-2 rounded-xl border border-slate-700 bg-slate-900 text-teal-300 hover:bg-slate-800 hover:border-teal-400 transition-colors whitespace-nowrap cursor-pointer shrink-0"
-              title="Universal Hospital, Lab & Pharmacy API Gateway"
-            >
-              <Cpu className="w-3.5 h-3.5 text-teal-400" />
-              <span>Partner APIs</span>
-            </button>
 
-            {/* Insurer Panel Dedicated Button */}
-            <button
-              type="button"
-              onClick={() => navigateTo('insurer', '/insurer')}
-              className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 xl:px-3 py-1.5 sm:py-2 rounded-xl border border-teal-500/30 bg-teal-50/70 text-[#008080] hover:bg-teal-100 hover:border-[#008080] transition-colors whitespace-nowrap cursor-pointer shrink-0"
-              title="Insurer Partner Portal"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#008080]" />
-              <span>Insurer Panel</span>
-            </button>
 
             {/* Partner With Us Dedicated Button */}
             <button
@@ -2225,29 +2205,7 @@ export default function App() {
                 <span>Partner With Us Portal (/partner-with-us)</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  navigateTo('insurer', '/insurer');
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-teal-500/30 bg-teal-50/70 text-[#008080] text-xs font-semibold hover:bg-teal-100 cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4 text-[#008080]" />
-                <span>Insurer Partner Portal (/insurer)</span>
-              </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  navigateTo('api-gateway', '/api-gateway');
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-teal-300 text-xs font-semibold hover:bg-slate-800 cursor-pointer"
-              >
-                <Cpu className="w-4 h-4 text-teal-400" />
-                <span>Universal Partner API Gateway (/api-gateway)</span>
-              </button>
 
               {isLoggedIn && currentUser ? (
                 <div className="flex flex-col gap-2">
