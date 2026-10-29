@@ -1,4 +1,10 @@
-import { PharmacyCategory, MedicineProduct } from '../types/pharmacy';
+import {
+  PharmacyCategory,
+  MedicineProduct,
+  PharmacyCoupon,
+  ReferralRewardLog,
+  PharmacyNotificationItem,
+} from '../types/pharmacy';
 
 export const PHARMACY_CATEGORIES: PharmacyCategory[] = [
   { id: 'all', name: 'All Products', icon: 'Pill', description: 'Complete pharmacy inventory', itemCount: 120 },
@@ -238,5 +244,123 @@ export const TRENDING_MEDICINES: MedicineProduct[] = [
     image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&auto=format&fit=crop&q=80',
     tags: ['Antacid', 'Stomach Gas', 'Acidity Syrup', 'Mint'],
     indications: 'Instant neutralizing relief from hyperacidity, heartburn, gas distress, and stomach bloating.',
+  },
+];
+
+export const PHARMACY_COUPONS: PharmacyCoupon[] = [
+  {
+    code: 'FIRSTCARE25',
+    title: 'First Medicine Order',
+    description: 'Flat 25% OFF up to ₹150 on your first prescription or OTC order.',
+    discountType: 'percent',
+    value: 25,
+    minOrder: 199,
+    maxDiscount: 150,
+    badge: 'NEW PATIENT SPECIAL',
+    expiresIn: 'Valid for 7 days',
+  },
+  {
+    code: 'CHRONIC20',
+    title: 'Chronic Refill Care',
+    description: 'Flat 20% discount on regular Diabetes, Heart, and BP medicines.',
+    discountType: 'percent',
+    value: 20,
+    minOrder: 399,
+    maxDiscount: 250,
+    badge: 'CHRONIC CARE',
+    expiresIn: 'Active this month',
+  },
+  {
+    code: 'HEALTH100',
+    title: 'Super Saver ₹100',
+    description: 'Instant ₹100 cashback off on orders above ₹499.',
+    discountType: 'flat',
+    value: 100,
+    minOrder: 499,
+    badge: 'FLAT ₹100 OFF',
+    expiresIn: 'Expires midnight',
+  },
+  {
+    code: 'FREESHIP',
+    title: 'Free Express Delivery',
+    description: '100% Free doorstep delivery on any order size.',
+    discountType: 'free_shipping',
+    value: 49,
+    minOrder: 0,
+    badge: 'ZERO DELIVERY FEE',
+    expiresIn: 'Limited slots today',
+  },
+];
+
+export const INITIAL_REFERRAL_LOGS: ReferralRewardLog[] = [
+  {
+    id: 'ref-1',
+    friendName: 'Ananya Sharma',
+    activity: 'Ordered Monthly Diabetic Refill Kit',
+    points: 300,
+    cashEarned: 150,
+    date: '24 Oct 2026',
+    status: 'Credited',
+  },
+  {
+    id: 'ref-2',
+    friendName: 'Rajesh Varma',
+    activity: 'Booked Omron BP Monitor & OTC Care',
+    points: 200,
+    cashEarned: 100,
+    date: '18 Oct 2026',
+    status: 'Credited',
+  },
+  {
+    id: 'ref-3',
+    friendName: 'Priya K',
+    activity: 'Registered with your link & verified Rx',
+    points: 200,
+    cashEarned: 100,
+    date: '12 Oct 2026',
+    status: 'Credited',
+  },
+];
+
+export const INITIAL_PHARMACY_NOTIFICATIONS: PharmacyNotificationItem[] = [
+  {
+    id: 'notif-1',
+    type: 'refill',
+    title: 'Monthly Refill Reminder: Glycomet 500 SR',
+    message: 'Your 30-day diabetic supply is estimated to run low in 4 days. Tap to reorder with 1-click doorstep refill.',
+    timestamp: '10 mins ago',
+    isRead: false,
+    actionLabel: 'Reorder Now',
+    actionTarget: 'catalog',
+  },
+  {
+    id: 'notif-2',
+    type: 'dispatch',
+    title: 'Order #NH-PHARM-2026-8910 Dispatched',
+    message: 'Express rider Suresh Kumar has picked up your temperature-monitored medicines. ETA ~18 mins.',
+    timestamp: '25 mins ago',
+    isRead: false,
+    actionLabel: 'Track Delivery',
+    actionTarget: 'orders',
+  },
+  {
+    id: 'notif-3',
+    type: 'deal',
+    title: 'Weekend Flash Offer: Extra 25% Off',
+    message: 'Use promo code FIRSTCARE25 or CHRONIC20 for instant savings on all prescription pharmaceuticals.',
+    timestamp: '2 hours ago',
+    isRead: true,
+    actionLabel: 'View Deals',
+    actionTarget: 'catalog',
+  },
+  {
+    id: 'notif-4',
+    type: 'wallet',
+    title: 'Referral Bonus: +₹150 Added to Wallet',
+    message: 'Your friend Ananya completed her first medicine order. ₹150 has been credited to your Nhealth Care Wallet.',
+    timestamp: 'Yesterday',
+    isRead: true,
+    actionLabel: 'View Wallet',
+    actionTarget: 'wallet',
   },
 ];

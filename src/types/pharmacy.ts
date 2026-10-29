@@ -41,6 +41,7 @@ export interface PrescriptionOrder {
   fileDataUrl?: string;
   uploadDate: string;
   status: 'Received' | 'Verifying by Pharmacist' | 'Approved' | 'Out for Delivery';
+  secureTokenId?: string;
 }
 
 export type PharmacyDeliveryStatus =
@@ -67,6 +68,7 @@ export interface PharmacyOrder {
   subtotal: number;
   deliveryFee: number;
   discount: number;
+  walletUsed?: number;
   grandTotal: number;
   patientName: string;
   patientPhone: string;
@@ -80,4 +82,38 @@ export interface PharmacyOrder {
   etaMinutes?: number;
   invoiceNumber: string;
   temperaturePreserved: boolean;
+  secureTokenId?: string;
+}
+
+export interface PharmacyCoupon {
+  code: string;
+  title: string;
+  description: string;
+  discountType: 'percent' | 'flat' | 'free_shipping';
+  value: number;
+  minOrder: number;
+  maxDiscount?: number;
+  badge: string;
+  expiresIn: string;
+}
+
+export interface ReferralRewardLog {
+  id: string;
+  friendName: string;
+  activity: string;
+  points: number;
+  cashEarned: number;
+  date: string;
+  status: 'Credited' | 'Pending';
+}
+
+export interface PharmacyNotificationItem {
+  id: string;
+  type: 'dispatch' | 'refill' | 'deal' | 'wallet';
+  title: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+  actionLabel?: string;
+  actionTarget?: 'catalog' | 'orders' | 'wallet';
 }

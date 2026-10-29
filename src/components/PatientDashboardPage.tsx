@@ -41,7 +41,8 @@ import {
   Copy,
   Share2,
   Upload,
-  Tag
+  Tag,
+  QrCode,
 } from 'lucide-react';
 import { UserAccount, ConfirmedBooking } from '../types/serviceBooking';
 import { AdBannerItem, getActiveBanners } from '../utils/advertisingStorage';
@@ -57,6 +58,15 @@ import { getStoredGridTabs, GridTabItem } from '../utils/gridTabsStorage';
 import { getStoredPromotions, PromotionItem } from '../utils/promotionsStorage';
 import { usePatientInactivityRefresh } from '../hooks/usePatientInactivityRefresh';
 import { UserNotificationCenter } from './UserNotificationCenter';
+import { SecureQrTokenCard } from './SecureQrTokenCard';
+import { SecureHealthToken } from '../types/secureToken';
+import {
+  findTokenById,
+  createOneTimeSecureToken,
+  resolveDepartment,
+  getDepartmentLabel,
+} from '../utils/secureQrToken';
+
 
 // Realistic vector wallet logo with multi-tone leather gradient, fine perimeter stitching, card slots & metallic snap clasp
 export const RealisticWalletLogo: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -787,6 +797,72 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
       setTimeout(() => setDownloadingId(null), 500);
     }
   };
+
+  // Persistent Booking & History State kept synchronized with storage and QR redemption events
+  const [internalBookings, setInternalBookings] = useState<ConfirmedBooking[]>(() => {
+    try {
+      const saved = localStorage.getItem('nhealth_bookings');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return bookingHistory;
+  });
+
+  useEffect(() => {
+    if (bookingHistory && bookingHistory.length > 0) {
+      setInternalBookings(bookingHistory);
+    }
+  }, [bookingHistory]);
+
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const saved = localStorage.getItem('nhealth_bookings');
+        if (saved) setInternalBookings(JSON.parse(saved));
+      } catch {}
+    };
+    window.addEventListener('nhealth_token_redeemed', handleSync);
+    window.addEventListener('nhealth_bookings_updated', handleSync);
+    return () => {
+      window.removeEventListener('nhealth_token_redeemed', handleSync);
+      window.removeEventListener('nhealth_bookings_updated', handleSync);
+    };
+  }, []);
+
+  const [activeQrModalToken, setActiveQrModalToken] = useState<SecureHealthToken | null>(null);
+
+  const handleOpenQrPass = (booking: ConfirmedBooking) => {
+    const existing = findTokenById(booking.secureTokenId || booking.referenceId);
+    if (existing) {
+      setActiveQrModalToken(existing);
+      return;
+    }
+
+    const isInsurance = !!booking.insuranceClaim;
+    const dept = resolveDepartment('general_service', booking.serviceName);
+    const token = createOneTimeSecureToken(
+      booking.referenceId,
+      'general_service',
+      booking.serviceName,
+      {
+        patientName: booking.patientName,
+        patientPhone: booking.phone,
+        deliveryAddress: `${booking.address}, ${booking.city}, ${booking.state}`,
+        totalAmount: isInsurance ? 0 : 499,
+        notes: `Age: ${booking.age}, Gender: ${booking.gender}. Slot: ${booking.preferredDate} (${booking.preferredTimeSlot})`,
+        insuranceClaimId: booking.insuranceClaim?.claimId,
+        insuranceCompany: booking.insuranceClaim?.insuranceCompany,
+      },
+      isInsurance,
+      booking.insuranceClaim?.claimId,
+      dept
+    );
+    if (booking.qrStatus === 'used' || booking.status === 'Used / Expired') {
+      token.status = 'redeemed';
+      token.redeemedAt = new Date().toISOString();
+    }
+    setActiveQrModalToken(token);
+  };
+
 
   // Unified Online Doctor Consultation Detector across Guest & Patient flows
   const isOnlineDoctorConsultation = (serviceIdentifier?: string | null): boolean => {
@@ -2328,46 +2404,118 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
                 </button>
               </div>
 
-              {bookingHistory.length > 0 ? (
-                <div className="space-y-3">
-                  {bookingHistory.map((item, idx) => (
-                    <div
-                      key={item.referenceId || idx}
-                      className={`p-4 sm:p-5 rounded-2xl border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
-                        isDark ? 'bg-[#00172d] border-cyan-900/40 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-800'
-                      }`}
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-mono font-bold ${isDark ? 'text-cyan-400' : 'text-[#008080]'}`}>
-                            {item.referenceId}
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                            {item.status}
-                          </span>
-                        </div>
-                        <h4 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-[#002b49]'}`}>{item.serviceName}</h4>
-                        <div className={`text-xs flex flex-wrap items-center gap-x-4 gap-y-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                          <span>Patient: {item.patientName}</span>
-                          <span>Address: {item.address}</span>
-                          <span>Phone: {item.phone}</span>
-                        </div>
-                      </div>
+              {internalBookings.length > 0 ? (
+                <div className="space-y-3.5">
+                  {internalBookings.map((item, idx) => {
+                    const token = findTokenById(item.secureTokenId || item.referenceId);
+                    const isQrUsed =
+                      item.qrStatus === 'used' ||
+                      item.status === 'Used / Expired' ||
+                      token?.status === 'redeemed' ||
+                      token?.status === 'expired';
+                    const categoryLabel =
+                      item.serviceCategory ||
+                      getDepartmentLabel(resolveDepartment('general_service', item.serviceName));
+                    const bookedDate = new Date(item.bookedAt || Date.now());
+                    const formattedDate = bookedDate.toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    });
+                    const formattedTime = bookedDate.toLocaleTimeString('en-IN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    });
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadBookingPDF(item)}
-                          disabled={downloadingId === item.referenceId}
-                          className="px-3.5 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 text-[#008080] dark:text-cyan-300 font-bold text-xs flex items-center gap-1.5 border border-teal-500/30 transition-all cursor-pointer shadow-2xs"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>{downloadingId === item.referenceId ? 'Generating...' : 'Download PDF Receipt'}</span>
-                        </button>
+                    return (
+                      <div
+                        key={item.referenceId || idx}
+                        className={`p-4 sm:p-5 rounded-2xl border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
+                          isDark
+                            ? 'bg-[#00172d] border-cyan-900/40 text-white shadow-lg'
+                            : 'bg-white border-slate-200 text-slate-800'
+                        }`}
+                      >
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-xs font-mono font-bold ${isDark ? 'text-cyan-400' : 'text-[#008080]'}`}>
+                              #{item.referenceId}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#002b49]/10 dark:bg-cyan-500/15 text-[#002b49] dark:text-cyan-300 border border-[#002b49]/20 dark:border-cyan-500/30">
+                              {categoryLabel}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                              {item.status}
+                            </span>
+                            {/* QR Expiration & Status Display */}
+                            {isQrUsed ? (
+                              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 flex items-center gap-1 shadow-2xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                <span>QR Used / Expired</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-2xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span>QR Active</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <h4 className={`text-base font-bold ${isDark ? 'text-white' : 'text-[#002b49]'}`}>
+                            {item.serviceName}
+                          </h4>
+
+                          <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'} flex items-center gap-1.5`}>
+                            <Clock className="w-3.5 h-3.5 text-[#008080] dark:text-cyan-400 shrink-0" />
+                            <span>
+                              Booked on: <strong>{formattedDate}</strong> at {formattedTime} • Slot: <strong>{item.preferredDate}</strong> ({item.preferredTimeSlot.split('(')[0].trim()})
+                            </span>
+                          </div>
+
+                          {/* Insurance Claim Details if Present */}
+                          {item.insuranceClaim && (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-[11px] font-semibold text-teal-800 dark:text-teal-200">
+                              <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                              <span className="truncate">
+                                Cashless Pre-Auth Claim #{item.insuranceClaim.claimId} • {item.insuranceClaim.insuranceCompany} (Policy: {item.insuranceClaim.policyNumber})
+                              </span>
+                            </div>
+                          )}
+
+                          <div className={`text-xs flex flex-wrap items-center gap-x-4 gap-y-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                            <span>Patient: <strong>{item.patientName}</strong> ({item.age} yrs, {item.gender})</span>
+                            <span className="truncate">Address: {item.address}, {item.city}</span>
+                            <span>Phone: {item.phone}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQrPass(item)}
+                            className="px-3.5 py-2 rounded-xl bg-teal-500/15 hover:bg-[#008080] hover:text-white text-[#008080] dark:text-cyan-300 font-bold text-xs flex items-center gap-1.5 border border-teal-500/30 transition-all cursor-pointer shadow-2xs active:scale-95"
+                            title="Re-check encrypted QR pass & booking token"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                            <span>View QR Pass</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadBookingPDF(item)}
+                            disabled={downloadingId === item.referenceId}
+                            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>{downloadingId === item.referenceId ? 'Generating...' : 'PDF Receipt'}</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+
               ) : (
                 <div className={`p-8 rounded-2xl border text-center space-y-3 ${
                   isDark ? 'bg-[#00172d] border-cyan-900/40 text-white' : 'bg-white border-slate-200 text-slate-800 shadow-sm'
@@ -3109,6 +3257,44 @@ export const PatientDashboardPage: React.FC<PatientDashboardPageProps> = ({
           )}
         </main>
       </div>
+
+      {/* View QR Pass Modal for Re-checking Booking & Decryption Details */}
+      {activeQrModalToken && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setActiveQrModalToken(null)}
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/75 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-md w-full max-h-[92vh] overflow-y-auto p-4 sm:p-5 shadow-2xl border border-slate-200 relative animate-in zoom-in-95 duration-150 text-left my-auto space-y-3 scrollbar-thin"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-[#008080] flex items-center justify-center">
+                  <QrCode className="w-4 h-4 text-[#008080]" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-[#002b49]">Unified Healthcare Pass</h4>
+                  <p className="text-[10px] text-slate-500 font-medium">Re-check &amp; verify booking details</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveQrModalToken(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                aria-label="Close QR Pass"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <SecureQrTokenCard token={activeQrModalToken} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

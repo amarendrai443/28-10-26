@@ -28,6 +28,7 @@ export interface BookingFormData {
   preferredTimeSlot: string;
   agreeTerms: boolean;
   agreePrivacy: boolean;
+  insuranceClaim?: import('./insurance').InsuranceClaimDetails;
 }
 
 export interface UserAccount {
@@ -63,5 +64,10 @@ export interface ConfirmedBooking {
   bookedAt: string;
   isGuest: boolean;
   userId?: string;
-  status: 'Confirmed' | 'Clinician Dispatched' | 'Sample Collected' | 'Report Ready';
+  status: 'Confirmed' | 'Clinician Dispatched' | 'Sample Collected' | 'Report Ready' | 'Completed' | 'Used / Expired';
+  insuranceClaim?: import('./insurance').InsuranceClaimDetails;
+  serviceCategory?: string;
+  secureTokenId?: string;
+  qrStatus?: 'active' | 'used' | 'expired';
 }
+

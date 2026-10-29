@@ -35,7 +35,10 @@ import {
   Check,
   X,
   Droplet,
-  Smartphone
+  Smartphone,
+  ScanLine,
+  QrCode,
+  Webhook,
 } from 'lucide-react';
 import { UserAccount, ConfirmedBooking } from '../types/serviceBooking';
 import { DashboardRole, LinkedAccount } from '../types/dashboard';
@@ -44,6 +47,9 @@ import {
   getGlobalDoctorOnlineStatus,
   setGlobalDoctorOnlineStatus,
 } from '../utils/doctorAvailabilityStore';
+import { AuthorizedPharmacyScannerModal } from './AuthorizedPharmacyScannerModal';
+import { TokenDepartment } from '../types/secureToken';
+import { PartnerApiWebhookSettings } from './PartnerApiWebhookSettings';
 
 interface RoleBasedDashboardProps {
   currentUser: UserAccount;
@@ -82,6 +88,46 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
   }, [currentUser.id, currentUser.role, currentUser.accountType]);
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
+  const [partnerSubTab, setPartnerSubTab] = useState<'overview' | 'api_webhooks'>('overview');
+
+  const getRoleDepartment = (role: DashboardRole): TokenDepartment => {
+    switch (role) {
+      case 'Doctor':
+        return 'doctor';
+      case 'Diagnostics':
+        return 'diagnostics';
+      case 'Pharmacy':
+        return 'pharmacy';
+      case 'Caregiver':
+        return 'nursing';
+      case 'Ambulance':
+        return 'ambulance';
+      case 'Hospital':
+        return 'doctor';
+      default:
+        return 'general';
+    }
+  };
+
+  const getRoleDepartmentLabel = (role: DashboardRole): string => {
+    switch (role) {
+      case 'Doctor':
+        return 'Doctor Consultations';
+      case 'Diagnostics':
+        return 'Lab & Diagnostics';
+      case 'Pharmacy':
+        return 'Pharmacy';
+      case 'Caregiver':
+        return 'Nursing & Home Care';
+      case 'Ambulance':
+        return 'Ambulance Transit';
+      case 'Hospital':
+        return 'Hospital Admissions';
+      default:
+        return 'Unified Services';
+    }
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -408,14 +454,79 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
                 <span>Book Home Service</span>
               </button>
             ) : (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-bold">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Admin Verified &amp; Live</span>
+              <div className="flex items-center gap-2.5 flex-wrap self-stretch sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsScannerModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-bold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer border border-teal-300/30"
+                  title={`Launch authorized ${getRoleDepartmentLabel(activeRole)} QR scanner`}
+                >
+                  <ScanLine className="w-4 h-4 text-cyan-200" />
+                  <span>Scan {getRoleDepartmentLabel(activeRole)} QR</span>
+                </button>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Admin Verified &amp; Live</span>
+                </div>
               </div>
             )}
           </div>
         </div>
 
+        {/* Partner Sub-Navigation Bar: Operational Console vs API & Webhook Settings */}
+        {activeRole !== 'Patient' && (
+          <div className="bg-white rounded-2xl p-1.5 border border-slate-200/90 shadow-2xs flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPartnerSubTab('overview')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                partnerSubTab === 'overview'
+                  ? 'bg-[#002b49] text-white shadow-2xs'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-[#002b49]'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-teal-400" />
+              <span>{activeRole} Operational Console</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPartnerSubTab('api_webhooks')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                partnerSubTab === 'api_webhooks'
+                  ? 'bg-[#002b49] text-white shadow-2xs'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-[#002b49]'
+              }`}
+            >
+              <Webhook className="w-3.5 h-3.5 text-teal-400" />
+              <span>API &amp; Webhook Integration Settings</span>
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono ${
+                partnerSubTab === 'api_webhooks' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-100 text-teal-700'
+              }`}>
+                REST &amp; HMAC
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* If Partner has selected API & Webhook tab, render PartnerApiWebhookSettings */}
+        {activeRole !== 'Patient' && partnerSubTab === 'api_webhooks' ? (
+          <PartnerApiWebhookSettings
+            partnerType={
+              activeRole === 'Pharmacy'
+                ? 'pharmacy'
+                : activeRole === 'Diagnostics'
+                ? 'lab'
+                : activeRole === 'Hospital'
+                ? 'hospital'
+                : 'clinic'
+            }
+            partnerName={currentUser.entityName || currentUser.name || `${activeRole} Partner Unit`}
+            partnerId={currentUser.id}
+            onToast={showToast}
+          />
+        ) : (
+          <>
         {/* ------------------------------------------------------------- */}
         {/* ROLE 1: PATIENT / GENERAL USER DASHBOARD */}
         {/* ------------------------------------------------------------- */}
@@ -1521,6 +1632,8 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
             </div>
           </div>
         )}
+          </>
+        )}
 
       </main>
 
@@ -1832,6 +1945,15 @@ export const RoleBasedDashboard: React.FC<RoleBasedDashboardProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Department-Specific Partner QR Scanner Modal */}
+      {isScannerModalOpen && (
+        <AuthorizedPharmacyScannerModal
+          isOpen={isScannerModalOpen}
+          onClose={() => setIsScannerModalOpen(false)}
+          department={getRoleDepartment(activeRole)}
+        />
       )}
 
       {/* Dashboard Footer Strip */}

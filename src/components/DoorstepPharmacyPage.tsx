@@ -28,15 +28,24 @@ import {
   Banknote,
   Download,
   Phone,
-  Navigation,
-  Calendar,
-  AlertCircle,
+  Tag,
+  Gift,
+  Wallet,
+  Bell,
+  Copy,
+  Share2,
+  Percent,
+  MessageSquare,
   ChevronRight,
   ExternalLink,
+  Coins,
 } from 'lucide-react';
 import {
   PHARMACY_CATEGORIES,
   TRENDING_MEDICINES,
+  PHARMACY_COUPONS,
+  INITIAL_REFERRAL_LOGS,
+  INITIAL_PHARMACY_NOTIFICATIONS,
 } from '../data/pharmacyData';
 import {
   MedicineProduct,
@@ -45,16 +54,28 @@ import {
   PharmacyOrder,
   PaymentMethod,
   PharmacyDeliveryStatus,
+  PharmacyCoupon,
+  ReferralRewardLog,
+  PharmacyNotificationItem,
 } from '../types/pharmacy';
 import {
   getStoredPharmacyOrders,
   savePharmacyOrder,
   generatePharmacyInvoicePDF,
 } from '../utils/pharmacyStorage';
+import { InsuranceClaimSection } from './InsuranceClaimSection';
+import { InsurancePaymentOption, InsuranceClaimDetails } from '../types/insurance';
+import { SecureHealthToken } from '../types/secureToken';
+import { createOneTimeSecureToken, findTokenById } from '../utils/secureQrToken';
+import { SecureQrTokenCard } from './SecureQrTokenCard';
+import { AuthorizedPharmacyScannerModal } from './AuthorizedPharmacyScannerModal';
+import { ScanLine } from 'lucide-react';
 
 interface DoorstepPharmacyPageProps {
   onBackToHome: () => void;
   onOpenBookingModal?: (serviceName: string) => void;
+  isLoggedIn?: boolean;
+  onPromptLogin?: () => void;
 }
 
 const DELIVERY_STEPS: { status: PharmacyDeliveryStatus; title: string; desc: string }[] = [
@@ -67,9 +88,12 @@ const DELIVERY_STEPS: { status: PharmacyDeliveryStatus; title: string; desc: str
 
 export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
   onBackToHome,
+  onOpenBookingModal,
+  isLoggedIn = false,
+  onPromptLogin,
 }) => {
-  // Navigation View: 'catalog' or 'orders'
-  const [activeView, setActiveView] = useState<'catalog' | 'orders'>('catalog');
+  // Navigation View: 'catalog' | 'deals' | 'wallet' | 'orders'
+  const [activeView, setActiveView] = useState<'catalog' | 'deals' | 'wallet' | 'orders'>('catalog');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +102,42 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [selectedQrToken, setSelectedQrToken] = useState<SecureHealthToken | null>(null);
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
+  const [scannerPrefilledTokenId, setScannerPrefilledTokenId] = useState('');
+
+  // Notifications State
+  const [notifications, setNotifications] = useState<PharmacyNotificationItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('nhealth_pharmacy_notifications');
+      return saved ? JSON.parse(saved) : INITIAL_PHARMACY_NOTIFICATIONS;
+    } catch {
+      return INITIAL_PHARMACY_NOTIFICATIONS;
+    }
+  });
+  const [selectedNotifFilter, setSelectedNotifFilter] = useState<'all' | 'unread' | 'refill' | 'dispatch'>('all');
+
+  // Coupon State
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<PharmacyCoupon | null>(null);
+  const [couponFeedback, setCouponFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [copiedCoupon, setCopiedCoupon] = useState<string | null>(null);
+
+  // Referral & Wallet State
+  const [walletBalance, setWalletBalance] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('nhealth_pharmacy_wallet_balance');
+      return saved ? Number(saved) : 350;
+    } catch {
+      return 350;
+    }
+  });
+  const [carePoints, setCarePoints] = useState<number>(700);
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const referralCode = 'NH-CARE-8820';
+  const referralLink = `https://nhealth.in/rx/ref/${referralCode}`;
 
   // Orders State
   const [orders, setOrders] = useState<PharmacyOrder[]>(() => getStoredPharmacyOrders());
@@ -94,6 +154,8 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('UPI');
   const [upiOption, setUpiOption] = useState<'gpay' | 'phonepe' | 'paytm' | 'qr'>('gpay');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [checkoutPaymentOption, setCheckoutPaymentOption] = useState<InsurancePaymentOption>('pay_now');
+  const [checkoutInsuranceClaim, setCheckoutInsuranceClaim] = useState<InsuranceClaimDetails | null>(null);
 
   // Prescription Form state
   const [rxPatientName, setRxPatientName] = useState('');
@@ -103,6 +165,26 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [rxSuccessOrder, setRxSuccessOrder] = useState<PrescriptionOrder | null>(null);
   const [isSubmittingRx, setIsSubmittingRx] = useState(false);
+  const [rxPaymentOption, setRxPaymentOption] = useState<InsurancePaymentOption>('pay_now');
+  const [rxInsuranceClaim, setRxInsuranceClaim] = useState<InsuranceClaimDetails | null>(null);
+
+  // Save notifications to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('nhealth_pharmacy_notifications', JSON.stringify(notifications));
+    } catch {}
+  }, [notifications]);
+
+  // Save wallet balance to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('nhealth_pharmacy_wallet_balance', walletBalance.toString());
+    } catch {}
+  }, [walletBalance]);
+
+  const unreadCount = useMemo(() => {
+    return notifications.filter((n) => !n.isRead).length;
+  }, [notifications]);
 
   // Active tracking order
   const trackingOrder = useMemo(() => {
@@ -166,8 +248,107 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
     (acc, curr) => acc + curr.product.price * curr.quantity,
     0
   );
-  const deliveryFee = cartSubtotal >= 499 || cartSubtotal === 0 ? 0 : 49;
-  const grandTotal = cartSubtotal + deliveryFee;
+
+  // Check if current user is an authorized partner/pharmacy staff (never guest or patient)
+  const isAuthorizedStaff = useMemo(() => {
+    try {
+      const savedUser = localStorage.getItem('nhealth_user');
+      if (!savedUser) return false;
+      const user = JSON.parse(savedUser);
+      const role = String(user?.role || user?.accountType || '').toLowerCase();
+      return (
+        (role.includes('partner') ||
+          role.includes('pharmacy') ||
+          role.includes('staff') ||
+          role.includes('admin') ||
+          role.includes('vendor')) &&
+        !role.includes('patient')
+      );
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Insurance Claim Restrictions: prevent stacking benefits
+  useEffect(() => {
+    if (checkoutPaymentOption === 'claim_insurance') {
+      setAppliedCoupon(null);
+      setUseWalletBalance(false);
+      setCouponInput('');
+      setCouponFeedback(null);
+    }
+  }, [checkoutPaymentOption]);
+
+  // Coupon Discount Calculation - Automatically 0 if Claim with Insurance
+  const couponDiscount = useMemo(() => {
+    if (checkoutPaymentOption === 'claim_insurance') return 0;
+    if (!appliedCoupon) return 0;
+    if (cartSubtotal < appliedCoupon.minOrder) return 0;
+    if (appliedCoupon.discountType === 'percent') {
+      const calculated = (cartSubtotal * appliedCoupon.value) / 100;
+      return appliedCoupon.maxDiscount ? Math.min(calculated, appliedCoupon.maxDiscount) : calculated;
+    }
+    if (appliedCoupon.discountType === 'flat') {
+      return appliedCoupon.value;
+    }
+    return 0; // free shipping handled below
+  }, [appliedCoupon, cartSubtotal, checkoutPaymentOption]);
+
+  // Delivery fee calculation
+  const rawDeliveryFee = cartSubtotal >= 499 || cartSubtotal === 0 ? 0 : 49;
+  const isFreeShipCoupon = checkoutPaymentOption !== 'claim_insurance' && appliedCoupon?.discountType === 'free_shipping';
+  const deliveryFee = isFreeShipCoupon ? 0 : rawDeliveryFee;
+
+  // Wallet deduction calculation (max up to min(walletBalance, 150)) - Automatically 0 if Claim with Insurance
+  const maxWalletUsable = Math.min(walletBalance, 150);
+  const walletDeduction = (checkoutPaymentOption !== 'claim_insurance' && useWalletBalance)
+    ? Math.min(maxWalletUsable, Math.max(0, cartSubtotal + deliveryFee - couponDiscount))
+    : 0;
+
+  const grandTotal = Math.max(0, cartSubtotal + deliveryFee - couponDiscount - walletDeduction);
+
+  // Apply Coupon Handler
+  const handleApplyCoupon = (codeToApply?: string) => {
+    const code = (codeToApply || couponInput).trim().toUpperCase();
+    if (!code) {
+      setCouponFeedback({ type: 'error', message: 'Please enter a coupon code' });
+      return;
+    }
+    const matched = PHARMACY_COUPONS.find((c) => c.code === code);
+    if (!matched) {
+      setCouponFeedback({ type: 'error', message: 'Invalid promo code. Check active deals.' });
+      return;
+    }
+    if (cartSubtotal < matched.minOrder) {
+      setCouponFeedback({
+        type: 'error',
+        message: `Min cart value for ${matched.code} is ₹${matched.minOrder}. Add ₹${matched.minOrder - cartSubtotal} more.`,
+      });
+      return;
+    }
+    setAppliedCoupon(matched);
+    setCouponFeedback({ type: 'success', message: `🎉 Coupon ${matched.code} applied successfully!` });
+    setCouponInput(matched.code);
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponFeedback(null);
+    setCouponInput('');
+  };
+
+  // Copy helper
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCoupon(code);
+    setTimeout(() => setCopiedCoupon(null), 2000);
+  };
+
+  const handleCopyReferral = () => {
+    navigator.clipboard.writeText(referralLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
   // Handle Checkout & Order Placement
   const handleCompleteOrder = () => {
@@ -177,35 +358,86 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
     }
     setIsPlacingOrder(true);
     setTimeout(() => {
+      const isCashlessClaim = checkoutPaymentOption === 'claim_insurance' && checkoutInsuranceClaim !== null;
       const randomOrderSuffix = Math.floor(1000 + Math.random() * 9000);
       const newOrder: PharmacyOrder = {
         id: `ORD-${Date.now().toString().slice(-6)}`,
-        orderNumber: `NH-PHARM-2026-${randomOrderSuffix}`,
+        orderNumber: isCashlessClaim ? `NH-INS-${randomOrderSuffix}` : `NH-PHARM-2026-${randomOrderSuffix}`,
         date: 'Just now',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         items: [...cart],
         subtotal: cartSubtotal,
         deliveryFee,
-        discount: 0,
-        grandTotal,
+        discount: Math.round(couponDiscount),
+        walletUsed: isCashlessClaim ? 0 : walletDeduction,
+        grandTotal: isCashlessClaim ? 0 : Math.round(grandTotal),
         patientName: checkoutPatientName,
         patientPhone: checkoutPhone,
         deliveryAddress: checkoutAddress,
-        paymentMethod: selectedPaymentMethod,
-        paymentStatus: selectedPaymentMethod === 'Cash on Delivery' ? 'Pending' : 'Paid',
+        paymentMethod: isCashlessClaim ? 'UPI' : selectedPaymentMethod,
+        paymentStatus: isCashlessClaim ? 'Paid' : (selectedPaymentMethod === 'Cash on Delivery' ? 'Pending' : 'Paid'),
         deliveryStatus: 'Order Placed',
         deliveryPartnerName: 'Ravi Teja (Rider ID: NH-504)',
         deliveryPartnerPhone: '+91 94401 23456',
         deliveryOtp: `${Math.floor(1000 + Math.random() * 9000)}`,
         etaMinutes: 25,
-        invoiceNumber: `INV-NH-2026-${randomOrderSuffix}`,
+        invoiceNumber: isCashlessClaim ? `INV-INS-${checkoutInsuranceClaim.claimId}` : `INV-NH-2026-${randomOrderSuffix}`,
         temperaturePreserved: true,
       };
+
+      // Generate strictly One-Time Use Secure QR Token
+      const secureToken = createOneTimeSecureToken(
+        newOrder.orderNumber,
+        'pharmacy_order',
+        `Doorstep Pharmacy Order #${newOrder.orderNumber}`,
+        {
+          patientName: newOrder.patientName,
+          patientPhone: newOrder.patientPhone,
+          deliveryAddress: newOrder.deliveryAddress,
+          items: newOrder.items.map((it) => ({
+            name: it.product.name,
+            quantity: it.quantity,
+            price: it.product.price,
+          })),
+          totalAmount: newOrder.grandTotal,
+          insuranceClaimId: checkoutInsuranceClaim?.claimId,
+          insuranceCompany: checkoutInsuranceClaim?.insuranceCompany,
+        },
+        isCashlessClaim,
+        checkoutInsuranceClaim?.claimId
+      );
+      newOrder.secureTokenId = secureToken.tokenId;
+
+      // Deduct wallet if used (when not full cashless claim)
+      if (!isCashlessClaim && walletDeduction > 0) {
+        setWalletBalance((prev) => Math.max(0, prev - walletDeduction));
+      }
+
+      // Add push notification for dispatch with secure token note
+      const newNotif: PharmacyNotificationItem = {
+        id: `notif-${Date.now()}`,
+        type: 'dispatch',
+        title: isCashlessClaim ? `Cashless Claim Approved: Order #${newOrder.orderNumber}` : `Order #${newOrder.orderNumber} Confirmed`,
+        message: isCashlessClaim
+          ? `Pre-auth Claim ${checkoutInsuranceClaim?.claimId} approved by ${checkoutInsuranceClaim?.insuranceCompany}. Zero payment gateway charge. Secure QR Pass ${secureToken.tokenId} issued.`
+          : `Your medicine order of ${newOrder.items.length} items has been confirmed. Secure QR Pass ${secureToken.tokenId} ready for delivery verification.`,
+        timestamp: 'Just now',
+        isRead: false,
+        actionLabel: 'Track Delivery',
+        actionTarget: 'orders',
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
 
       const updated = savePharmacyOrder(newOrder);
       setOrders(updated);
       setSelectedTrackingOrderId(newOrder.id);
+      setSelectedQrToken(secureToken);
+      setScannerPrefilledTokenId(secureToken.tokenId);
       setCart([]);
+      setAppliedCoupon(null);
+      setUseWalletBalance(false);
+      setCheckoutInsuranceClaim(null);
+      setCheckoutPaymentOption('pay_now');
       setIsPlacingOrder(false);
       setIsCheckoutModalOpen(false);
       setIsCartOpen(false);
@@ -213,7 +445,7 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
     }, 900);
   };
 
-  // Step advancement simulation for interactive testing
+  // Step advancement simulation
   const advanceDeliveryStatus = (orderId: string) => {
     setOrders((prev) =>
       prev.map((ord) => {
@@ -234,6 +466,20 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
               etaMinutes: nextStatus === 'Delivered' ? 0 : Math.max(5, (ord.etaMinutes || 20) - 7),
               paymentStatus: nextStatus === 'Delivered' && ord.paymentMethod === 'Cash on Delivery' ? 'Paid' as const : ord.paymentStatus,
             };
+
+            // Add notification on delivery update
+            const updateNotif: PharmacyNotificationItem = {
+              id: `notif-${Date.now()}`,
+              type: nextStatus === 'Delivered' ? 'refill' : 'dispatch',
+              title: `Order Status: ${nextStatus}`,
+              message: `Order #${ord.orderNumber} is now ${nextStatus}. ${nextStatus === 'Delivered' ? 'Medicines safely handed over.' : 'Insulated transit in progress.'}`,
+              timestamp: 'Just now',
+              isRead: false,
+              actionLabel: 'View Order',
+              actionTarget: 'orders',
+            };
+            setNotifications((prevN) => [updateNotif, ...prevN]);
+
             return updated;
           }
         }
@@ -242,25 +488,52 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
     );
   };
 
-  // Handle Prescription submission
+  // Prescription submit
   const handlePrescriptionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!rxPatientName.trim() || !rxPatientPhone.trim() || !selectedFileName) {
       alert('Please provide patient name, contact number, and select a prescription file.');
       return;
     }
+    if (rxPaymentOption === 'claim_insurance' && !rxInsuranceClaim) {
+      alert('Please complete the insurance OTP verification to approve your cashless prescription claim.');
+      return;
+    }
     setIsSubmittingRx(true);
     setTimeout(() => {
       const order: PrescriptionOrder = {
-        id: `RX-${Date.now().toString().slice(-6)}`,
+        id: rxInsuranceClaim ? `RX-INS-${rxInsuranceClaim.claimId}` : `RX-${Date.now().toString().slice(-6)}`,
         patientName: rxPatientName,
         patientPhone: rxPatientPhone,
         deliveryAddress: rxAddress || 'Doorstep Delivery Address',
-        deliveryNotes: rxNotes,
+        deliveryNotes: rxInsuranceClaim
+          ? `[Cashless Insurance Claim: ${rxInsuranceClaim.claimId} (${rxInsuranceClaim.insuranceCompany}) - Policy ${rxInsuranceClaim.policyNumber}]. Instructions: ${rxNotes || 'Dispense approved generic equivalent'}`
+          : rxNotes,
         fileName: selectedFileName,
         uploadDate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'Received',
+        status: rxInsuranceClaim ? 'Approved' : 'Received',
       };
+
+      const secureToken = createOneTimeSecureToken(
+        order.id,
+        'prescription_order',
+        `Prescription Dispensation (${order.id})`,
+        {
+          patientName: order.patientName,
+          patientPhone: order.patientPhone,
+          deliveryAddress: order.deliveryAddress,
+          prescriptionName: order.fileName,
+          totalAmount: 0,
+          notes: order.deliveryNotes,
+          insuranceClaimId: rxInsuranceClaim?.claimId,
+          insuranceCompany: rxInsuranceClaim?.insuranceCompany,
+        },
+        !!rxInsuranceClaim,
+        rxInsuranceClaim?.claimId
+      );
+      order.secureTokenId = secureToken.tokenId;
+      setScannerPrefilledTokenId(secureToken.tokenId);
+
       setRxSuccessOrder(order);
       setIsSubmittingRx(false);
     }, 700);
@@ -273,7 +546,17 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
     setRxNotes('');
     setSelectedFileName(null);
     setRxSuccessOrder(null);
+    setRxInsuranceClaim(null);
+    setRxPaymentOption('pay_now');
     setIsUploadModalOpen(false);
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
   };
 
   const getCategoryIcon = (iconName: string) => {
@@ -298,6 +581,14 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
   const getStepIndex = (status: PharmacyDeliveryStatus) => {
     return DELIVERY_STEPS.findIndex((s) => s.status === status);
   };
+
+  // Filtered notifications
+  const displayedNotifications = useMemo(() => {
+    if (selectedNotifFilter === 'unread') return notifications.filter((n) => !n.isRead);
+    if (selectedNotifFilter === 'refill') return notifications.filter((n) => n.type === 'refill');
+    if (selectedNotifFilter === 'dispatch') return notifications.filter((n) => n.type === 'dispatch');
+    return notifications;
+  }, [notifications, selectedNotifFilter]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
@@ -334,11 +625,11 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
 
           {/* Right Header Navigation Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* View Switcher Tabs */}
+            {/* 4 Main View Switcher Tabs */}
             <div className="flex items-center bg-[#001d31] p-1 rounded-xl border border-teal-500/20 text-xs">
               <button
                 onClick={() => setActiveView('catalog')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   activeView === 'catalog'
                     ? 'bg-[#008080] text-white shadow-xs'
                     : 'text-slate-300 hover:text-white'
@@ -347,8 +638,30 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                 Medicines
               </button>
               <button
+                onClick={() => setActiveView('deals')}
+                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  activeView === 'deals'
+                    ? 'bg-[#008080] text-white shadow-xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Tag className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden xs:inline">Deals</span>
+              </button>
+              <button
+                onClick={() => setActiveView('wallet')}
+                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  activeView === 'wallet'
+                    ? 'bg-[#008080] text-white shadow-xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Gift className="w-3.5 h-3.5 text-teal-300" />
+                <span className="hidden xs:inline">Rewards</span>
+              </button>
+              <button
                 onClick={() => setActiveView('orders')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                   activeView === 'orders'
                     ? 'bg-[#008080] text-white shadow-xs'
                     : 'text-slate-300 hover:text-white'
@@ -361,14 +674,43 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
               </button>
             </div>
 
+            {/* Notification Inbox Bell Button */}
+            <button
+              onClick={() => setIsNotificationsOpen(true)}
+              className="relative p-2 rounded-lg bg-[#001d31] hover:bg-[#003e6b] text-white border border-teal-500/20 transition-all active:scale-95 cursor-pointer"
+              aria-label="View Pharmacy Notifications"
+              title="Pharmacy Alerts & Reminders"
+            >
+              <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-teal-300" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-900 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-[#002b49] animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Partner / Staff QR Scanner Button - strictly restricted to authorized Partner / Pharmacy Staff */}
+            {isAuthorizedStaff && (
+              <button
+                onClick={() => setIsScannerModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs sm:text-sm font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
+                title="Authorized Pharmacy Staff QR Scanner & Invalidation Terminal"
+              >
+                <ScanLine className="w-4 h-4 text-amber-300" />
+                <span className="hidden sm:inline">Staff Scanner</span>
+              </button>
+            )}
+
+            {/* Upload Rx Button */}
             <button
               onClick={() => setIsUploadModalOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#008080] hover:bg-[#006666] text-white text-xs sm:text-sm font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#008080] hover:bg-[#006666] text-white text-xs sm:text-sm font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
             >
               <UploadCloud className="w-4 h-4" />
               <span>Upload Rx</span>
             </button>
 
+            {/* Shopping Cart Button */}
             <button
               onClick={() => setIsCartOpen(true)}
               className="relative p-2 rounded-lg bg-[#001d31] hover:bg-[#003e6b] text-white border border-teal-500/20 transition-all active:scale-95 cursor-pointer"
@@ -390,6 +732,15 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
       {/* ========================================================================= */}
       {activeView === 'catalog' && (
         <>
+          {/* PROMOTIONAL TICKER / BANNER STRIP */}
+          <div className="bg-gradient-to-r from-amber-500 via-teal-600 to-[#002b49] text-white px-3.5 py-2 text-xs font-bold text-center flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+            onClick={() => setActiveView('deals')}
+          >
+            <Tag className="w-3.5 h-3.5 animate-bounce" />
+            <span>⚡ Special Patient Offer: Apply code <span className="bg-white/20 px-2 py-0.5 rounded text-yellow-200">FIRSTCARE25</span> for Flat 25% Off + Free Delivery!</span>
+            <span className="underline hidden sm:inline ml-1 font-semibold">View All Offers &rarr;</span>
+          </div>
+
           {/* HERO BANNER & SEARCH */}
           <section className="bg-gradient-to-b from-[#002b49] to-[#001d31] text-white px-3.5 sm:px-6 lg:px-8 pt-6 pb-8 border-b border-slate-800">
             <div className="max-w-4xl mx-auto text-center space-y-4">
@@ -494,11 +845,11 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
               </div>
 
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-                {PHARMACY_CATEGORIES.map((cat) => {
+                {PHARMACY_CATEGORIES.map((cat, catIdx) => {
                   const isSelected = selectedCategory === cat.id;
                   return (
                     <button
-                      key={cat.id}
+                      key={`rx-cat-${cat.id}-${catIdx}`}
                       onClick={() => setSelectedCategory(cat.id)}
                       className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all border cursor-pointer ${
                         isSelected
@@ -534,11 +885,11 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
-                {filteredProducts.map((prod) => {
+                {filteredProducts.map((prod, pIdx) => {
                   const qty = getProductCartQty(prod.id);
                   return (
                     <div
-                      key={prod.id}
+                      key={`rx-prod-${prod.id}-${pIdx}`}
                       className="bg-white rounded-2xl border border-slate-200/90 hover:border-teal-500/50 shadow-2xs hover:shadow-md transition-all flex flex-col overflow-hidden group"
                     >
                       {/* Image & Badges */}
@@ -636,7 +987,254 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* VIEW 2: ORDERS, RAPIDO LIVE TRACKING & TAX INVOICES                       */}
+      {/* VIEW 2: OFFERS, DEALS & COUPONS                                           */}
+      {/* ========================================================================= */}
+      {activeView === 'deals' && (
+        <main className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+          <div className="border-b border-slate-200 pb-4">
+            <h2 className="text-xl sm:text-2xl font-black text-[#002b49] flex items-center gap-2">
+              <Tag className="w-6 h-6 text-amber-500" />
+              <span>Active Pharmacy Offers & Promo Codes</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Apply valid medical coupons for instant discounts on prescriptions, chronic refills, and health devices.
+            </p>
+          </div>
+
+          {/* Coupons Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {PHARMACY_COUPONS.map((coupon, cIdx) => {
+              const isApplied = appliedCoupon?.code === coupon.code;
+              const isCopied = copiedCoupon === coupon.code;
+
+              return (
+                <div
+                  key={`rx-coupon-${coupon.code}-${cIdx}`}
+                  className={`bg-white rounded-2xl border p-5 transition-all shadow-sm flex flex-col justify-between ${
+                    isApplied ? 'border-teal-500 ring-2 ring-teal-500/20 bg-teal-50/20' : 'border-slate-200 hover:border-teal-400'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+                        {coupon.badge}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-400">
+                        {coupon.expiresIn}
+                      </span>
+                    </div>
+
+                    <h3 className="text-base font-extrabold text-[#002b49]">{coupon.title}</h3>
+                    <p className="text-xs text-slate-600 leading-relaxed">{coupon.description}</p>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Minimum Order Value: <span className="font-bold text-slate-700">₹{coupon.minOrder}</span>
+                    </p>
+                  </div>
+
+                  <div className="pt-4 mt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="px-3 py-1.5 rounded-lg border-2 border-dashed border-teal-600 bg-teal-50/70 font-mono font-black text-sm text-[#002b49]">
+                        {coupon.code}
+                      </div>
+                      <button
+                        onClick={() => handleCopyCode(coupon.code)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                        title="Copy code"
+                      >
+                        {isCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        handleApplyCoupon(coupon.code);
+                        if (cart.length > 0) {
+                          setIsCheckoutModalOpen(true);
+                        } else {
+                          setActiveView('catalog');
+                        }
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isApplied
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-[#002b49] hover:bg-[#008080] text-white shadow-xs'
+                      }`}
+                    >
+                      {isApplied ? 'Applied to Cart ✓' : 'Apply & Order'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Chronic Refill Banner */}
+          <div className="bg-gradient-to-r from-[#002b49] via-[#003e6b] to-teal-900 rounded-3xl p-6 text-white flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="space-y-2">
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-teal-400/20 text-teal-300 border border-teal-400/30">
+                Automatic Monthly Refills
+              </span>
+              <h3 className="text-xl font-black">Save Up to ₹1,200 Every Month on Chronic Medicines</h3>
+              <p className="text-xs text-slate-300 max-w-xl">
+                Set up recurring doorstep delivery for your family's BP, Diabetes, and Heart medicines. Enjoy guaranteed stock reservation and free express shipping.
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveView('catalog')}
+              className="px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs sm:text-sm whitespace-nowrap cursor-pointer shadow-lg"
+            >
+              Browse Chronic Care
+            </button>
+          </div>
+        </main>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW 3: REFERRAL REWARDS WALLET                                           */}
+      {/* ========================================================================= */}
+      {activeView === 'wallet' && (
+        <main className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+          <div className="border-b border-slate-200 pb-4">
+            <h2 className="text-xl sm:text-2xl font-black text-[#002b49] flex items-center gap-2">
+              <Gift className="w-6 h-6 text-teal-600" />
+              <span>Nhealth Care Rewards & Referral Wallet</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Invite friends and family to doorstep healthcare. Earn ₹150 wallet credits on every successful medicine order.
+            </p>
+          </div>
+
+          {/* Wallet Balance Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-6 rounded-3xl bg-gradient-to-br from-[#002b49] to-[#001d31] text-white shadow-md flex flex-col justify-between">
+              <div>
+                <p className="text-xs font-semibold text-teal-300 uppercase tracking-wider">Available Wallet Cash</p>
+                <h3 className="text-3xl sm:text-4xl font-black mt-2 text-white">₹{walletBalance}</h3>
+                <p className="text-[11px] text-slate-300 mt-1">Can be used to pay for medicine orders instantly.</p>
+              </div>
+              <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-xs">
+                <span className="text-emerald-400 font-bold">100% Usable on Checkout</span>
+                <span className="text-slate-400">1 Credit = ₹1.00</span>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">CarePoints Balance</p>
+                  <Coins className="w-5 h-5 text-amber-500" />
+                </div>
+                <h3 className="text-3xl sm:text-4xl font-black mt-2 text-[#002b49]">{carePoints} Pts</h3>
+                <p className="text-[11px] text-slate-500 mt-1">Auto-converts to ₹{carePoints / 2} wallet cash upon checkout.</p>
+              </div>
+              <div className="mt-6 pt-4 border-t border-slate-100 text-xs text-slate-600 font-medium">
+                Earn 10 points for every ₹100 spent on pharmaceuticals.
+              </div>
+            </div>
+
+            <div className="p-6 rounded-3xl bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <p className="text-xs font-bold text-teal-800 uppercase tracking-wider">Referral Earning Rate</p>
+                <h3 className="text-2xl font-black mt-2 text-teal-950">Give ₹250 · Get ₹150</h3>
+                <p className="text-[11px] text-teal-700 mt-1">
+                  Friend receives flat 25% discount, you get ₹150 credited to wallet on delivery!
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`Hey! Use my Nhealth healthcare invite to get 25% off on genuine medicines and doctor home visits. Click here: ${referralLink}`)}`, '_blank');
+                }}
+                className="mt-6 py-2.5 rounded-xl bg-[#008080] hover:bg-[#006666] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Invite on WhatsApp</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Shareable Link Box */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4 shadow-sm">
+            <h3 className="text-base font-bold text-[#002b49]">Your Unique Referral Link & Code</h3>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="flex-1 w-full bg-slate-50 rounded-2xl border border-slate-200 p-3 flex items-center justify-between text-xs sm:text-sm font-mono text-slate-700">
+                <span className="truncate">{referralLink}</span>
+                <span className="px-2.5 py-1 rounded-lg bg-teal-100 text-teal-900 font-bold ml-2 shrink-0">
+                  {referralCode}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={handleCopyReferral}
+                  className="flex-1 sm:flex-none px-4 py-3 rounded-2xl bg-[#002b49] hover:bg-[#003e6b] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedLink ? 'Copied Link!' : 'Copy Link'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Nhealth Doorstep Pharmacy',
+                        text: 'Get 25% off on genuine medicines at home with Nhealth!',
+                        url: referralLink,
+                      }).catch(() => {});
+                    } else {
+                      handleCopyReferral();
+                    }
+                  }}
+                  className="px-4 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Share</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Referral Earnings History Log */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-[#002b49]">Referral Activity & Earnings History</h3>
+              <span className="text-xs text-slate-500 font-semibold">3 Referrals Active</span>
+            </div>
+
+            <div className="space-y-3">
+              {INITIAL_REFERRAL_LOGS.map((log, lIdx) => (
+                <div
+                  key={`rx-log-${log.id}-${lIdx}`}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 gap-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-teal-500/10 text-[#008080] font-bold text-sm flex items-center justify-center">
+                      {log.friendName[0]}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-[#002b49]">{log.friendName}</p>
+                      <p className="text-[11px] text-slate-500">{log.activity} · {log.date}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 self-end sm:self-auto">
+                    <div className="text-right">
+                      <span className="text-xs font-extrabold text-emerald-700">+₹{log.cashEarned}</span>
+                      <p className="text-[10px] text-slate-400 font-semibold">+{log.points} Points</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      {log.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW 4: ORDERS, RAPIDO LIVE TRACKING & TAX INVOICES                       */}
       {/* ========================================================================= */}
       {activeView === 'orders' && (
         <main className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-8">
@@ -728,12 +1326,11 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
 
                       return (
                         <div
-                          key={step.status}
+                          key={`rx-step-${step.status}-${idx}`}
                           className={`flex sm:flex-col items-center sm:text-center gap-3 sm:gap-2 p-2 sm:p-0 rounded-xl transition-all ${
                             isCurrent ? 'bg-teal-50/50 sm:bg-transparent' : ''
                           }`}
                         >
-                          {/* Step Circle Indicator */}
                           <div
                             className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0 transition-all ${
                               isCompleted
@@ -748,7 +1345,6 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                             )}
                           </div>
 
-                          {/* Step Labels */}
                           <div className="flex-1 sm:flex-initial">
                             <p
                               className={`text-xs font-bold ${
@@ -833,12 +1429,12 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
             </h3>
 
             <div className="space-y-3">
-              {orders.map((order) => {
+              {orders.map((order, oIdx) => {
                 const isSelected = order.id === selectedTrackingOrderId;
 
                 return (
                   <div
-                    key={order.id}
+                    key={`rx-order-${order.id}-${oIdx}`}
                     onClick={() => setSelectedTrackingOrderId(order.id)}
                     className={`bg-white rounded-2xl border p-4 sm:p-5 transition-all cursor-pointer ${
                       isSelected
@@ -864,7 +1460,6 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
 
                       {/* Status Badges */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        {/* Payment Status Badge */}
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold ${
                             order.paymentStatus === 'Paid'
@@ -877,7 +1472,6 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                           Payment: {order.paymentStatus} ({order.paymentMethod})
                         </span>
 
-                        {/* Delivery Status Badge */}
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold ${
                             order.deliveryStatus === 'Delivered'
@@ -896,7 +1490,7 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                         {order.items.map((item, idx) => (
                           <div
-                            key={idx}
+                            key={`rx-item-${order.id}-${item.product?.id || idx}-${idx}`}
                             className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100"
                           >
                             <span className="font-medium text-slate-800 truncate mr-2">
@@ -913,16 +1507,49 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                     {/* Card Footer: Amount and Download Invoice */}
                     <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
                       <div>
-                        <span className="text-slate-500">Total Amount: </span>
+                        <span className="text-slate-500">Total Paid: </span>
                         <span className="text-base font-black text-[#002b49]">
                           ₹{order.grandTotal}
                         </span>
-                        {order.deliveryFee === 0 && (
-                          <span className="ml-2 text-emerald-600 font-semibold">(Free Delivery)</span>
+                        {order.discount > 0 && (
+                          <span className="ml-2 text-rose-600 font-semibold">(Coupon -₹{order.discount})</span>
                         )}
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            let tok = order.secureTokenId ? findTokenById(order.secureTokenId) : null;
+                            if (!tok) {
+                              tok = createOneTimeSecureToken(
+                                order.orderNumber,
+                                'pharmacy_order',
+                                `Doorstep Pharmacy Order #${order.orderNumber}`,
+                                {
+                                  patientName: order.patientName,
+                                  patientPhone: order.patientPhone,
+                                  deliveryAddress: order.deliveryAddress,
+                                  items: order.items.map((it) => ({
+                                    name: it.product.name,
+                                    quantity: it.quantity,
+                                    price: it.product.price,
+                                  })),
+                                  totalAmount: order.grandTotal,
+                                }
+                              );
+                            }
+                            setSelectedQrToken(tok);
+                            setScannerPrefilledTokenId(tok.tokenId);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-[#008080] font-bold transition-all flex items-center gap-1.5 border border-teal-200 cursor-pointer text-xs"
+                          title="View One-Time Encrypted QR Pass"
+                        >
+                          <QrCode className="w-3.5 h-3.5 text-[#008080]" />
+                          <span>Secure QR Pass</span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={(e) => {
@@ -945,7 +1572,7 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 3. STICKY CART FOOTER BAR (WHEN CART HAS ITEMS)                           */}
+      {/* 5. STICKY CART FOOTER BAR (WHEN CART HAS ITEMS)                           */}
       {/* ========================================================================= */}
       {totalCartItems > 0 && !isCartOpen && !isCheckoutModalOpen && (
         <div className="sticky bottom-0 z-30 bg-[#002b49] text-white p-3.5 sm:p-4 border-t border-[#003e6b] shadow-2xl animate-in slide-in-from-bottom duration-300">
@@ -979,7 +1606,7 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 4. SHOPPING CART SIDE DRAWER                                              */}
+      {/* 6. SHOPPING CART SIDE DRAWER (WITH COUPON INTEGRATION)                    */}
       {/* ========================================================================= */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs flex justify-end">
@@ -1007,9 +1634,9 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                   <p className="text-xs text-slate-400">Add medicines or upload a prescription to get started.</p>
                 </div>
               ) : (
-                cart.map(({ product, quantity }) => (
+                cart.map(({ product, quantity }, cIdx) => (
                   <div
-                    key={product.id}
+                    key={`rx-cart-${product.id}-${cIdx}`}
                     className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50"
                   >
                     <img
@@ -1042,10 +1669,44 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
               )}
             </div>
 
-            {/* Cart Breakdown & Checkout Trigger */}
+            {/* Cart Breakdown, Coupon Box & Checkout Trigger */}
             {cart.length > 0 && (
               <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-3">
-                <div className="space-y-1.5 text-xs text-slate-600">
+                {/* Coupon Input Box */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      placeholder="Enter Promo Code (e.g. FIRSTCARE25)"
+                      className="flex-1 px-3 py-1.5 text-xs uppercase font-mono rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                    />
+                    {appliedCoupon ? (
+                      <button
+                        onClick={removeCoupon}
+                        className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200 hover:bg-rose-100 cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleApplyCoupon()}
+                        className="px-3 py-1.5 rounded-lg bg-[#002b49] text-white font-bold text-xs hover:bg-[#008080] cursor-pointer"
+                      >
+                        Apply
+                      </button>
+                    )}
+                  </div>
+
+                  {couponFeedback && (
+                    <p className={`text-[11px] font-semibold ${couponFeedback.type === 'success' ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {couponFeedback.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-200">
                   <div className="flex justify-between">
                     <span>Items Total ({totalCartItems})</span>
                     <span>₹{cartSubtotal}</span>
@@ -1054,6 +1715,14 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                     <span>Doorstep Express Delivery</span>
                     <span>{deliveryFee === 0 ? <span className="text-emerald-600 font-bold">FREE</span> : `₹${deliveryFee}`}</span>
                   </div>
+
+                  {appliedCoupon && couponDiscount > 0 && (
+                    <div className="flex justify-between text-rose-600 font-bold">
+                      <span>Coupon Discount ({appliedCoupon.code})</span>
+                      <span>- ₹{couponDiscount}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between text-sm font-bold text-[#002b49] pt-2 border-t border-slate-200">
                     <span>Grand Total</span>
                     <span>₹{grandTotal}</span>
@@ -1068,7 +1737,7 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                   className="w-full py-3 rounded-xl bg-[#008080] hover:bg-[#006666] text-white font-bold text-sm shadow-md transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
                 >
                   <CreditCard className="w-4 h-4" />
-                  <span>Select Payment & Checkout</span>
+                  <span>Proceed to Payment (₹{grandTotal})</span>
                 </button>
               </div>
             )}
@@ -1077,7 +1746,7 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 5. PAYMENT INTEGRATION UI & CHECKOUT MODAL                                */}
+      {/* 7. PAYMENT INTEGRATION UI & CHECKOUT MODAL (WITH WALLET & COUPONS)       */}
       {/* ========================================================================= */}
       {isCheckoutModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3.5 overflow-y-auto">
@@ -1139,155 +1808,212 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                 </div>
               </div>
 
-              {/* Payment Method Selectors */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                  2. Choose Payment Mode
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {/* UPI */}
-                  <label
-                    onClick={() => setSelectedPaymentMethod('UPI')}
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
-                      selectedPaymentMethod === 'UPI'
-                        ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      checked={selectedPaymentMethod === 'UPI'}
-                      onChange={() => setSelectedPaymentMethod('UPI')}
-                      className="mt-0.5 text-teal-600"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <QrCode className="w-4 h-4 text-teal-700" />
-                        <span className="font-bold text-xs text-slate-900">UPI Instant</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        GPay, PhonePe, Paytm, QR Code
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Cards */}
-                  <label
-                    onClick={() => setSelectedPaymentMethod('Cards')}
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
-                      selectedPaymentMethod === 'Cards'
-                        ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      checked={selectedPaymentMethod === 'Cards'}
-                      onChange={() => setSelectedPaymentMethod('Cards')}
-                      className="mt-0.5 text-teal-600"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <CreditCard className="w-4 h-4 text-teal-700" />
-                        <span className="font-bold text-xs text-slate-900">Credit / Debit Cards</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Visa, Mastercard, RuPay
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Net Banking */}
-                  <label
-                    onClick={() => setSelectedPaymentMethod('Net Banking')}
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
-                      selectedPaymentMethod === 'Net Banking'
-                        ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      checked={selectedPaymentMethod === 'Net Banking'}
-                      onChange={() => setSelectedPaymentMethod('Net Banking')}
-                      className="mt-0.5 text-teal-600"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <Building className="w-4 h-4 text-teal-700" />
-                        <span className="font-bold text-xs text-slate-900">Net Banking</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        All Indian Major Banks
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Cash on Delivery */}
-                  <label
-                    onClick={() => setSelectedPaymentMethod('Cash on Delivery')}
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
-                      selectedPaymentMethod === 'Cash on Delivery'
-                        ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      checked={selectedPaymentMethod === 'Cash on Delivery'}
-                      onChange={() => setSelectedPaymentMethod('Cash on Delivery')}
-                      className="mt-0.5 text-teal-600"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <Banknote className="w-4 h-4 text-teal-700" />
-                        <span className="font-bold text-xs text-slate-900">Cash / Pay on Delivery</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Pay cash or QR at doorstep
-                      </p>
-                    </div>
-                  </label>
-                </div>
-
-                {/* Sub-selector detail for UPI */}
-                {selectedPaymentMethod === 'UPI' && (
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-around">
-                    <button
-                      type="button"
-                      onClick={() => setUpiOption('gpay')}
-                      className={`px-3 py-1.5 rounded-lg font-bold ${
-                        upiOption === 'gpay' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-white'
-                      }`}
-                    >
-                      Google Pay
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUpiOption('phonepe')}
-                      className={`px-3 py-1.5 rounded-lg font-bold ${
-                        upiOption === 'phonepe' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-white'
-                      }`}
-                    >
-                      PhonePe
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUpiOption('paytm')}
-                      className={`px-3 py-1.5 rounded-lg font-bold ${
-                        upiOption === 'paytm' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-white'
-                      }`}
-                    >
-                      Paytm UPI
-                    </button>
+              {/* Wallet & Rewards Section: Disabled & Hidden when Claim with Insurance is selected */}
+              {checkoutPaymentOption === 'claim_insurance' ? (
+                <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-start gap-2.5 text-xs text-blue-900">
+                  <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">IRDAI Cashless Insurance Mode Active</span>
+                    <p className="text-[11px] text-blue-700 mt-0.5">
+                      To prevent stacking benefits, promotional coupons, discount codes, and wallet points redemption are automatically disabled for cashless insurance claims.
+                    </p>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                walletBalance > 0 && (
+                  <div className="p-3.5 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-200 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        id="applyWalletCheck"
+                        checked={useWalletBalance}
+                        onChange={(e) => setUseWalletBalance(e.target.checked)}
+                        className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer"
+                      />
+                      <label htmlFor="applyWalletCheck" className="cursor-pointer">
+                        <span className="font-extrabold text-[#002b49]">Use Nhealth Care Wallet</span>
+                        <p className="text-[11px] text-teal-800">
+                          Available Balance: ₹{walletBalance} · Apply up to ₹{maxWalletUsable} off
+                        </p>
+                      </label>
+                    </div>
+                    {useWalletBalance && (
+                      <span className="text-emerald-700 font-black text-sm">- ₹{walletDeduction}</span>
+                    )}
+                  </div>
+                )
+              )}
+
+              {/* Insurance & Payment Choice */}
+              <InsuranceClaimSection
+                selectedOption={checkoutPaymentOption}
+                isLoggedIn={isLoggedIn}
+                onPromptLogin={onPromptLogin}
+                onChangeOption={(opt) => {
+                  setCheckoutPaymentOption(opt);
+                  if (opt === 'pay_now') {
+                    setCheckoutInsuranceClaim(null);
+                  }
+                }}
+                onClaimConfirmed={(claim) => {
+                  setCheckoutInsuranceClaim(claim);
+                }}
+                patientPhone={checkoutPhone}
+                serviceTitle="Doorstep Pharmacy Medicines"
+                amount={grandTotal}
+              />
+
+              {/* Payment Method Selectors - Only shown if Pay Now is selected */}
+              {checkoutPaymentOption === 'pay_now' && (
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                    Choose Payment Gateway
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* UPI */}
+                    <label
+                      onClick={() => setSelectedPaymentMethod('UPI')}
+                      className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                        selectedPaymentMethod === 'UPI'
+                          ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        checked={selectedPaymentMethod === 'UPI'}
+                        onChange={() => setSelectedPaymentMethod('UPI')}
+                        className="mt-0.5 text-teal-600"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <QrCode className="w-4 h-4 text-teal-700" />
+                          <span className="font-bold text-xs text-slate-900">UPI Instant</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          GPay, PhonePe, Paytm, QR Code
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Cards */}
+                    <label
+                      onClick={() => setSelectedPaymentMethod('Cards')}
+                      className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                        selectedPaymentMethod === 'Cards'
+                          ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        checked={selectedPaymentMethod === 'Cards'}
+                        onChange={() => setSelectedPaymentMethod('Cards')}
+                        className="mt-0.5 text-teal-600"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <CreditCard className="w-4 h-4 text-teal-700" />
+                          <span className="font-bold text-xs text-slate-900">Credit / Debit Cards</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Visa, Mastercard, RuPay
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Net Banking */}
+                    <label
+                      onClick={() => setSelectedPaymentMethod('Net Banking')}
+                      className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                        selectedPaymentMethod === 'Net Banking'
+                          ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        checked={selectedPaymentMethod === 'Net Banking'}
+                        onChange={() => setSelectedPaymentMethod('Net Banking')}
+                        className="mt-0.5 text-teal-600"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <Building className="w-4 h-4 text-teal-700" />
+                          <span className="font-bold text-xs text-slate-900">Net Banking</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          All Indian Major Banks
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Cash on Delivery */}
+                    <label
+                      onClick={() => setSelectedPaymentMethod('Cash on Delivery')}
+                      className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                        selectedPaymentMethod === 'Cash on Delivery'
+                          ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        checked={selectedPaymentMethod === 'Cash on Delivery'}
+                        onChange={() => setSelectedPaymentMethod('Cash on Delivery')}
+                        className="mt-0.5 text-teal-600"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <Banknote className="w-4 h-4 text-teal-700" />
+                          <span className="font-bold text-xs text-slate-900">Cash / Pay on Delivery</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Pay cash or QR at doorstep
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Sub-selector detail for UPI */}
+                  {selectedPaymentMethod === 'UPI' && (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-around">
+                      <button
+                        type="button"
+                        onClick={() => setUpiOption('gpay')}
+                        className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer ${
+                          upiOption === 'gpay' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-white'
+                        }`}
+                      >
+                        Google Pay
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUpiOption('phonepe')}
+                        className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer ${
+                          upiOption === 'phonepe' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-white'
+                        }`}
+                      >
+                        PhonePe
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUpiOption('paytm')}
+                        className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer ${
+                          upiOption === 'paytm' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-white'
+                        }`}
+                      >
+                        Paytm UPI
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Order Final Summary */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
@@ -1299,9 +2025,33 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                   <span>Doorstep Temperature Box Delivery</span>
                   <span>{deliveryFee === 0 ? <span className="text-emerald-600 font-bold">FREE</span> : `₹${deliveryFee}`}</span>
                 </div>
+
+                {appliedCoupon && couponDiscount > 0 && (
+                  <div className="flex justify-between text-rose-600 font-bold">
+                    <span>Coupon ({appliedCoupon.code})</span>
+                    <span>- ₹{couponDiscount}</span>
+                  </div>
+                )}
+
+                {walletDeduction > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold">
+                    <span>Care Wallet Credit</span>
+                    <span>- ₹{walletDeduction}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between text-sm font-bold text-[#002b49] pt-2 border-t border-slate-200">
                   <span>Payable Amount</span>
-                  <span className="text-teal-700">₹{grandTotal}</span>
+                  <span className={checkoutPaymentOption === 'claim_insurance' && checkoutInsuranceClaim ? 'text-emerald-700 font-extrabold' : 'text-teal-700'}>
+                    {checkoutPaymentOption === 'claim_insurance' && checkoutInsuranceClaim ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="line-through text-slate-400 font-normal text-xs">₹{grandTotal}</span>
+                        <span>₹0 (Cashless Pre-Auth)</span>
+                      </span>
+                    ) : (
+                      `₹${grandTotal}`
+                    )}
+                  </span>
                 </div>
               </div>
 
@@ -1316,12 +2066,20 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                 </button>
                 <button
                   type="button"
-                  disabled={isPlacingOrder}
+                  disabled={isPlacingOrder || (checkoutPaymentOption === 'claim_insurance' && !checkoutInsuranceClaim)}
                   onClick={handleCompleteOrder}
                   className="flex-2 py-3 rounded-xl bg-[#008080] hover:bg-[#006666] text-white font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>{isPlacingOrder ? 'Processing...' : `Pay & Confirm ₹${grandTotal}`}</span>
+                  <span>
+                    {isPlacingOrder
+                      ? 'Processing...'
+                      : checkoutPaymentOption === 'claim_insurance'
+                      ? checkoutInsuranceClaim
+                        ? 'Confirm Cashless Order (₹0 Due)'
+                        : 'Verify Insurance OTP Above'
+                      : `Pay & Confirm ₹${grandTotal}`}
+                  </span>
                 </button>
               </div>
             </div>
@@ -1330,27 +2088,177 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 6. PRESCRIPTION UPLOAD MODAL                                              */}
+      {/* 8. DEDICATED PHARMACY NOTIFICATIONS MODAL / INBOX                         */}
       {/* ========================================================================= */}
-      {isUploadModalOpen && (
+      {isNotificationsOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3.5 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden my-6 animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden my-6 animate-in zoom-in-95 duration-200">
+            {/* Header */}
             <div className="bg-[#002b49] text-white p-4 sm:p-5 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-lg bg-teal-500/20 text-teal-300">
+                  <Bell className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base sm:text-lg">Pharmacy Notifications</h3>
+                  <p className="text-[11px] text-slate-300">Refill reminders, dispatches, and exclusive deals</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsNotificationsOpen(false)}
+                className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter Pills & Actions */}
+            <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                <button
+                  onClick={() => setSelectedNotifFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
+                    selectedNotifFilter === 'all' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  All ({notifications.length})
+                </button>
+                <button
+                  onClick={() => setSelectedNotifFilter('unread')}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
+                    selectedNotifFilter === 'unread' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Unread ({unreadCount})
+                </button>
+                <button
+                  onClick={() => setSelectedNotifFilter('refill')}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
+                    selectedNotifFilter === 'refill' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Refills
+                </button>
+                <button
+                  onClick={() => setSelectedNotifFilter('dispatch')}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
+                    selectedNotifFilter === 'dispatch' ? 'bg-[#002b49] text-white' : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Dispatches
+                </button>
+              </div>
+
+              <button
+                onClick={markAllNotificationsAsRead}
+                className="text-[11px] font-bold text-teal-700 hover:underline shrink-0 cursor-pointer"
+              >
+                Mark Read
+              </button>
+            </div>
+
+            {/* Notifications List */}
+            <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+              {displayedNotifications.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <Bell className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                  <p className="text-xs font-semibold">No notifications in this filter</p>
+                </div>
+              ) : (
+                displayedNotifications.map((n, nIdx) => (
+                  <div
+                    key={`rx-notif-${n.id}-${nIdx}`}
+                    className={`p-3.5 rounded-2xl border transition-all ${
+                      n.isRead ? 'bg-white border-slate-200' : 'bg-teal-50/40 border-teal-300 ring-1 ring-teal-400/20'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {n.type === 'refill' && <Pill className="w-4 h-4 text-rose-500 shrink-0" />}
+                        {n.type === 'dispatch' && <Bike className="w-4 h-4 text-teal-600 shrink-0" />}
+                        {n.type === 'deal' && <Tag className="w-4 h-4 text-amber-500 shrink-0" />}
+                        {n.type === 'wallet' && <Gift className="w-4 h-4 text-emerald-600 shrink-0" />}
+                        <h4 className="text-xs font-extrabold text-[#002b49]">{n.title}</h4>
+                      </div>
+                      <span className="text-[10px] text-slate-400 whitespace-nowrap">{n.timestamp}</span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">{n.message}</p>
+
+                    {n.actionLabel && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-end">
+                        <button
+                          onClick={() => {
+                            setIsNotificationsOpen(false);
+                            if (n.actionTarget) {
+                              setActiveView(n.actionTarget);
+                            }
+                          }}
+                          className="px-3 py-1 rounded-lg bg-[#002b49] hover:bg-[#008080] text-white text-[11px] font-bold cursor-pointer"
+                        >
+                          {n.actionLabel} &rarr;
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs">
+              <button
+                onClick={clearAllNotifications}
+                className="text-[11px] text-slate-500 hover:text-rose-600 cursor-pointer"
+              >
+                Clear All
+              </button>
+              <button
+                onClick={() => setIsNotificationsOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 9. PRESCRIPTION UPLOAD MODAL                                              */}
+      {/* ========================================================================= */}
+      {isUploadModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) resetRxForm();
+          }}
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-5 overflow-y-auto cursor-pointer"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden my-6 animate-in zoom-in-95 duration-200 cursor-default relative"
+          >
+            {/* Modal Header */}
+            <div className="bg-[#002b49] text-white p-4 sm:p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-teal-500/20 text-teal-300">
                   <UploadCloud className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-bold text-base sm:text-lg">Upload Prescription</h3>
-                  <p className="text-[11px] text-slate-300">Our pharmacists will dispense accurate medicines</p>
+                  <p className="text-[11px] text-teal-200/80">Our pharmacists will dispense accurate medicines</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={resetRxForm}
-                className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+                className="p-2 rounded-full text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-all border border-white/20 shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-400"
+                title="Close upload popup (or click outside)"
+                aria-label="Close prescription upload dialog"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-white" />
               </button>
             </div>
 
@@ -1370,8 +2278,26 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                   <p><span className="font-semibold text-slate-700">Prescription File:</span> {rxSuccessOrder.fileName}</p>
                   <p><span className="font-semibold text-slate-700">Status:</span> Verification in Progress</p>
                 </div>
+
+                {/* Show Secure Token Quick Launcher */}
+                {rxSuccessOrder.secureTokenId && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tok = rxSuccessOrder.secureTokenId ? findTokenById(rxSuccessOrder.secureTokenId) : null;
+                        if (tok) setSelectedQrToken(tok);
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <QrCode className="w-4 h-4" />
+                      <span>View One-Time Encrypted QR Pass & WhatsApp Receipt</span>
+                    </button>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-slate-500">
-                  A registered Nhealth pharmacist is reviewing your prescription and will call you within 15 minutes to confirm dosage and delivery slot.
+                  A registered Nhealth pharmacist is reviewing your prescription and will verify your encrypted QR token upon dispatch.
                 </p>
                 <button
                   onClick={resetRxForm}
@@ -1464,6 +2390,24 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                   />
                 </div>
 
+                {/* Insurance Claim Option for Prescription Upload */}
+                <InsuranceClaimSection
+                  selectedOption={rxPaymentOption}
+                  isLoggedIn={isLoggedIn}
+                  onPromptLogin={onPromptLogin}
+                  onChangeOption={(opt) => {
+                    setRxPaymentOption(opt);
+                    if (opt === 'pay_now') {
+                      setRxInsuranceClaim(null);
+                    }
+                  }}
+                  onClaimConfirmed={(claim) => {
+                    setRxInsuranceClaim(claim);
+                  }}
+                  patientPhone={rxPatientPhone}
+                  serviceTitle="Prescription Medicines Dispensation"
+                />
+
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-teal-50 text-teal-800 text-[11px] border border-teal-200">
                   <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
                   <span>Only valid prescriptions from registered medical practitioners are processed.</span>
@@ -1479,16 +2423,74 @@ export const DoorstepPharmacyPage: React.FC<DoorstepPharmacyPageProps> = ({
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmittingRx}
+                    disabled={isSubmittingRx || (rxPaymentOption === 'claim_insurance' && !rxInsuranceClaim)}
                     className="px-5 py-2 text-xs sm:text-sm font-bold text-white bg-[#008080] hover:bg-[#006666] rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                   >
-                    {isSubmittingRx ? 'Submitting...' : 'Upload & Place Order'}
+                    {isSubmittingRx
+                      ? 'Submitting...'
+                      : rxPaymentOption === 'claim_insurance'
+                      ? rxInsuranceClaim
+                        ? 'Confirm Cashless Prescription Order'
+                        : 'Verify Insurance OTP to Proceed'
+                      : 'Upload & Place Order'}
                   </button>
                 </div>
               </form>
             )}
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 10. ONE-TIME USE SECURE QR PASS & WHATSAPP RECEIPT MODAL                  */}
+      {/* ========================================================================= */}
+      {selectedQrToken && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedQrToken(null);
+          }}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-5 overflow-y-auto cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-md w-full my-auto max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200 cursor-default scrollbar-thin rounded-2xl sm:rounded-3xl shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedQrToken(null)}
+              className="absolute top-3 right-3 z-30 p-2 rounded-full bg-slate-800 text-white hover:bg-slate-700 shadow-xl border border-slate-600 cursor-pointer transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-teal-400"
+              aria-label="Close Secure QR Pass"
+              title="Close pass (or click outside)"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+            <SecureQrTokenCard
+              token={selectedQrToken}
+              isStaff={isAuthorizedStaff}
+              onOpenScanner={
+                isAuthorizedStaff
+                  ? () => {
+                      const id = selectedQrToken.tokenId;
+                      setSelectedQrToken(null);
+                      setScannerPrefilledTokenId(id);
+                      setIsScannerModalOpen(true);
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 11. AUTHORIZED PARTNER PHARMACY SCANNER & ONE-TIME INVALIDATION TERMINAL */}
+      {/* ========================================================================= */}
+      {isAuthorizedStaff && (
+        <AuthorizedPharmacyScannerModal
+          isOpen={isScannerModalOpen}
+          onClose={() => setIsScannerModalOpen(false)}
+          prefilledTokenId={scannerPrefilledTokenId}
+        />
       )}
     </div>
   );

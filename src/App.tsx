@@ -67,6 +67,9 @@ import { QuickLookFAB } from './components/QuickLookFAB';
 import { NotificationPermissionPrompt } from './components/NotificationPermissionPrompt';
 import { OnlineConsultationPage } from './components/OnlineConsultationPage';
 import { DoorstepPharmacyPage } from './components/DoorstepPharmacyPage';
+import { DedicatedServiceDashboard, DedicatedServiceKey } from './components/DedicatedServiceDashboard';
+import { InsurerPartnerPortal } from './components/InsurerPartnerPortal';
+import { PartnerApiGatewayPortal } from './components/PartnerApiGatewayPortal';
 import { TestimonialsCarousel } from './components/TestimonialsCarousel';
 import { PatientFeedbackModal } from './components/PatientFeedbackModal';
 import { usePatientInactivityRefresh } from './hooks/usePatientInactivityRefresh';
@@ -103,6 +106,12 @@ import {
   notifyAppointmentConfirmed,
   checkAndDispatchScheduledNotifications,
 } from './utils/pushNotificationStorage';
+import {
+  createOneTimeSecureToken,
+  resolveDepartment,
+  getDepartmentLabel,
+} from './utils/secureQrToken';
+
 
 const NHEALTH_LOGO_URL = 'https://i.ibb.co/JW6HFRV0/Nhealth-logo-8cm-x-8cm-high-quality-1-1.png';
 const NHEALTH_LOGO_FALLBACK = '/nhealth_logo.png';
@@ -256,7 +265,10 @@ type RoutePath =
   | 'patient-dashboard'
   | 'teams'
   | 'online-consultation'
-  | 'doorstep-pharmacy';
+  | 'doorstep-pharmacy'
+  | 'insurer'
+  | 'api-gateway'
+  | DedicatedServiceKey;
 
 export const VALID_ROUTES: RoutePath[] = [
   'home',
@@ -269,7 +281,44 @@ export const VALID_ROUTES: RoutePath[] = [
   'teams',
   'online-consultation',
   'doorstep-pharmacy',
+  'insurer',
+  'api-gateway',
+  'doctor-home-visits',
+  'home-diagnostics',
+  'xray-portable-diagnostics',
+  'bedside-assistance',
+  'eldercare-senior-assistance',
+  'specialized-nursing-care',
+  'physiotherapy-at-home',
+  'dental-care-oral-health',
+  'prepaid-premium-opd',
+  'diagnostics-advance-imaging',
+  'blood-bank-support',
+  'ambulance-24-7',
+  'nhealth-careride',
+  'nhealth-careassist',
 ];
+
+export const getServiceDedicatedRoute = (identifier?: string | null): DedicatedServiceKey | null => {
+  if (!identifier) return null;
+  const clean = identifier.toLowerCase().trim().replace(/[-_]/g, ' ');
+  if (clean.includes('doctor home visit') || clean.includes('doctor visit') || clean === 'doctor home visits') return 'doctor-home-visits';
+  if (clean.includes('diagnostic') && (clean.includes('advance') || clean.includes('imaging') || clean.includes('mri') || clean.includes('ct'))) return 'diagnostics-advance-imaging';
+  if (clean.includes('diagnostic') || clean.includes('lab') || clean.includes('blood test') || clean.includes('pathology')) return 'home-diagnostics';
+  if (clean.includes('xray') || clean.includes('x ray') || clean.includes('portable diagnostic') || clean.includes('ecg')) return 'xray-portable-diagnostics';
+  if (clean.includes('bedside') || clean.includes('attendant') || clean.includes('caregiver')) return 'bedside-assistance';
+  if (clean.includes('elder') || clean.includes('senior') || clean.includes('geriatric')) return 'eldercare-senior-assistance';
+  if (clean.includes('nursing') || clean.includes('wound') || clean.includes('injection') || clean.includes('iv infusion')) return 'specialized-nursing-care';
+  if (clean.includes('physio') || clean.includes('rehab') || clean.includes('physical therapy')) return 'physiotherapy-at-home';
+  if (clean.includes('dental') || clean.includes('oral') || clean.includes('teeth') || clean.includes('dentist')) return 'dental-care-oral-health';
+  if (clean.includes('opd') || clean.includes('premium opd') || clean.includes('hospital assistance')) return 'prepaid-premium-opd';
+  if (clean.includes('advance imaging') || clean.includes('imaging') || clean.includes('mri') || clean.includes('ct scan')) return 'diagnostics-advance-imaging';
+  if (clean.includes('blood bank') || clean.includes('blood donor') || clean.includes('blood support') || clean.includes('blood')) return 'blood-bank-support';
+  if (clean.includes('ambulance') || clean.includes('sos') || clean.includes('emergency ambulance')) return 'ambulance-24-7';
+  if (clean.includes('careride') || clean.includes('care ride') || clean.includes('medical transit') || clean.includes('patient transport') || clean.includes('transit')) return 'nhealth-careride';
+  if (clean.includes('careassist') || clean.includes('care assist') || clean.includes('concierge') || clean.includes('case manager')) return 'nhealth-careassist';
+  return null;
+};
 
 export function normalizeRoute(raw: string | null | undefined): RoutePath | null {
   if (!raw) return null;
@@ -284,6 +333,12 @@ export function normalizeRoute(raw: string | null | undefined): RoutePath | null
   if (clean === 'enquiry' || clean === 'enquiries' || clean === 'corporate') return 'corporate-enquiries';
   if (clean === 'online-consultation' || clean === 'consultation' || clean === 'online-doctor' || clean === 'online-doctor-consultation' || clean === 'doctor-consultation') return 'online-consultation';
   if (clean === 'doorstep-pharmacy' || clean === 'pharmacy' || clean === 'medicines' || clean === 'medicine' || clean === 'online-pharmacy') return 'doorstep-pharmacy';
+  if (clean === 'insurer' || clean === 'insurer-portal' || clean === 'insurer-panel' || clean === 'insurance-partner') return 'insurer';
+  if (clean === 'api-gateway' || clean === 'api' || clean === 'developer-api' || clean === 'api-docs' || clean === 'docs') return 'api-gateway';
+  
+  const dedicated = getServiceDedicatedRoute(clean);
+  if (dedicated) return dedicated;
+  
   return null;
 }
 
@@ -380,6 +435,22 @@ export default function App() {
       return [];
     }
   });
+
+  // Keep booking history in real-time sync when QR tokens are redeemed by partners
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const saved = localStorage.getItem('nhealth_bookings');
+        if (saved) setBookingHistory(JSON.parse(saved));
+      } catch {}
+    };
+    window.addEventListener('nhealth_token_redeemed', handleSync);
+    window.addEventListener('nhealth_bookings_updated', handleSync);
+    return () => {
+      window.removeEventListener('nhealth_token_redeemed', handleSync);
+      window.removeEventListener('nhealth_bookings_updated', handleSync);
+    };
+  }, []);
 
   // SPA Routing State with Full Refresh Persistence (URL path, window.location.hash & localStorage)
   const [currentRoute, setCurrentRoute] = useState<RoutePath>(() => {
@@ -1232,6 +1303,29 @@ export default function App() {
   ) => {
     if (!data) return;
     const generatedRef = 'NH-' + Math.floor(100000 + Math.random() * 900000);
+    const isInsurance = !!data.insuranceClaim;
+    const dept = resolveDepartment('general_service', data.serviceName);
+    const categoryLabel = getDepartmentLabel(dept);
+
+    // Create and link permanent secure QR token immediately
+    const token = createOneTimeSecureToken(
+      generatedRef,
+      'general_service',
+      data.serviceName,
+      {
+        patientName: data.patientName,
+        patientPhone: data.phone,
+        deliveryAddress: `${data.address}, ${data.city}, ${data.state}`,
+        totalAmount: isInsurance ? 0 : 499,
+        notes: `Age: ${data.age}, Gender: ${data.gender}. Slot: ${data.preferredDate} (${data.preferredTimeSlot})`,
+        insuranceClaimId: data.insuranceClaim?.claimId,
+        insuranceCompany: data.insuranceClaim?.insuranceCompany,
+      },
+      isInsurance,
+      data.insuranceClaim?.claimId,
+      dept
+    );
+
     const confirmed: ConfirmedBooking = {
       referenceId: generatedRef,
       serviceId: data.serviceId,
@@ -1251,6 +1345,10 @@ export default function App() {
       isGuest,
       userId: isGuest ? undefined : (userId || currentUser?.id),
       status: 'Confirmed',
+      insuranceClaim: data.insuranceClaim,
+      serviceCategory: categoryLabel,
+      secureTokenId: token.tokenId,
+      qrStatus: 'active',
     };
 
     if (!isGuest) {
@@ -1264,6 +1362,7 @@ export default function App() {
     } else {
       saveGuestBooking(confirmed);
     }
+
 
     setConfirmedBookingData(confirmed);
     notifyAppointmentConfirmed(confirmed.serviceName, confirmed.referenceId);
@@ -1336,6 +1435,11 @@ export default function App() {
     }
     if (isDoorstepPharmacy(serviceName)) {
       navigateTo('doorstep-pharmacy', '/doorstep-pharmacy');
+      return;
+    }
+    const dedicatedRoute = getServiceDedicatedRoute(serviceName);
+    if (dedicatedRoute) {
+      navigateTo(dedicatedRoute, `/${dedicatedRoute}`);
       return;
     }
     const sNameLower = serviceName.toLowerCase();
@@ -1462,6 +1566,8 @@ export default function App() {
         <ServiceBookingModal
           service={selectedServiceForBooking}
           isOpen={isServiceBookingOpen}
+          isLoggedIn={isLoggedIn}
+          onPromptLogin={() => navigateTo('auth', '/auth')}
           onClose={() => {
             setIsServiceBookingOpen(false);
             setCustomPrefillSymptoms('');
@@ -1514,6 +1620,8 @@ export default function App() {
   if (currentRoute === 'doorstep-pharmacy') {
     return (
       <DoorstepPharmacyPage
+        isLoggedIn={isLoggedIn}
+        onPromptLogin={() => navigateTo('auth', '/auth')}
         onBackToHome={() => {
           if (isLoggedIn && (currentUser?.role === 'Patient' || currentUser?.accountType === 'Patient')) {
             navigateTo('patient-dashboard', '/patient-dashboard#overview');
@@ -1522,6 +1630,115 @@ export default function App() {
           }
         }}
         onOpenBookingModal={(serviceName) => openBookingFor(serviceName)}
+      />
+    );
+  }
+
+  const isDedicatedServiceRoute = (route: string): route is DedicatedServiceKey => {
+    return [
+      'doctor-home-visits',
+      'home-diagnostics',
+      'xray-portable-diagnostics',
+      'bedside-assistance',
+      'eldercare-senior-assistance',
+      'specialized-nursing-care',
+      'physiotherapy-at-home',
+      'dental-care-oral-health',
+      'prepaid-premium-opd',
+      'diagnostics-advance-imaging',
+      'blood-bank-support',
+      'ambulance-24-7',
+      'nhealth-careride',
+      'nhealth-careassist',
+    ].includes(route as any);
+  };
+
+  if (isDedicatedServiceRoute(currentRoute)) {
+    return (
+      <>
+        <DedicatedServiceDashboard
+          serviceKey={currentRoute}
+          onBackToHome={() => {
+            if (isLoggedIn && (currentUser?.role === 'Patient' || currentUser?.accountType === 'Patient')) {
+              navigateTo('patient-dashboard', '/patient-dashboard#overview');
+            } else {
+              navigateTo('home', '/');
+            }
+          }}
+          onOpenBookingModal={(service, prefill) => {
+            setSelectedServiceForBooking(service);
+            if (prefill) {
+              setCustomPrefillSymptoms(prefill);
+            }
+            setIsServiceBookingOpen(true);
+          }}
+          isLoggedIn={isLoggedIn}
+          onPromptLogin={() => navigateTo('auth', '/auth')}
+          patientName={currentUser?.name || 'Valued Patient'}
+          patientPhone={currentUser?.phone || '9876543210'}
+        />
+
+        <ServiceBookingModal
+          service={selectedServiceForBooking}
+          isOpen={isServiceBookingOpen}
+          isLoggedIn={isLoggedIn}
+          onPromptLogin={() => navigateTo('auth', '/auth')}
+          onClose={() => {
+            setIsServiceBookingOpen(false);
+            setCustomPrefillSymptoms('');
+          }}
+          onSubmitBooking={handleBookingFormSubmit}
+          initialPhone={currentUser?.phone || ''}
+          initialName={currentUser?.name || ''}
+          initialSymptoms={customPrefillSymptoms}
+        />
+
+        <GuestWarningModal
+          isOpen={isWarningModalOpen}
+          onClose={() => setIsWarningModalOpen(false)}
+          serviceName={pendingDraftBooking?.serviceName}
+          onLoginRedirect={() => {
+            setIsWarningModalOpen(false);
+            setLoginRedirectFromBooking(true);
+            setLoginModalOpen(true);
+          }}
+          onProceedGuest={() => {
+            setIsWarningModalOpen(false);
+            finalizeBooking(pendingDraftBooking, true);
+          }}
+        />
+
+        <BookingConfirmationModal
+          booking={confirmedBookingData}
+          isOpen={isConfirmationModalOpen}
+          onClose={() => setIsConfirmationModalOpen(false)}
+          isLoggedIn={isLoggedIn}
+          onViewHistory={() => setMyBookingsModalOpen(true)}
+        />
+
+        <MyBookingsModal
+          isOpen={myBookingsModalOpen}
+          onClose={() => setMyBookingsModalOpen(false)}
+          bookings={bookingHistory}
+          userName={currentUser?.name || 'Valued Patient'}
+          onBookNew={() => setMyBookingsModalOpen(false)}
+        />
+      </>
+    );
+  }
+
+  if (currentRoute === 'insurer') {
+    return (
+      <InsurerPartnerPortal
+        onNavigateHome={() => navigateTo('home', '/')}
+      />
+    );
+  }
+
+  if (currentRoute === 'api-gateway') {
+    return (
+      <PartnerApiGatewayPortal
+        onNavigateHome={() => navigateTo('home', '/')}
       />
     );
   }
@@ -1598,6 +1815,8 @@ export default function App() {
         <ServiceBookingModal
           service={selectedServiceForBooking}
           isOpen={isServiceBookingOpen}
+          isLoggedIn={isLoggedIn}
+          onPromptLogin={() => navigateTo('auth', '/auth')}
           onClose={() => {
             setIsServiceBookingOpen(false);
             setSelectedServiceForBooking(null);
@@ -1832,6 +2051,28 @@ export default function App() {
             </button>
 
 
+            {/* Universal API Gateway Dedicated Button */}
+            <button
+              type="button"
+              onClick={() => navigateTo('api-gateway', '/api-gateway')}
+              className="hidden lg:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 xl:px-3 py-1.5 sm:py-2 rounded-xl border border-slate-700 bg-slate-900 text-teal-300 hover:bg-slate-800 hover:border-teal-400 transition-colors whitespace-nowrap cursor-pointer shrink-0"
+              title="Universal Hospital, Lab & Pharmacy API Gateway"
+            >
+              <Cpu className="w-3.5 h-3.5 text-teal-400" />
+              <span>Partner APIs</span>
+            </button>
+
+            {/* Insurer Panel Dedicated Button */}
+            <button
+              type="button"
+              onClick={() => navigateTo('insurer', '/insurer')}
+              className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 xl:px-3 py-1.5 sm:py-2 rounded-xl border border-teal-500/30 bg-teal-50/70 text-[#008080] hover:bg-teal-100 hover:border-[#008080] transition-colors whitespace-nowrap cursor-pointer shrink-0"
+              title="Insurer Partner Portal"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#008080]" />
+              <span>Insurer Panel</span>
+            </button>
+
             {/* Partner With Us Dedicated Button */}
             <button
               type="button"
@@ -1982,6 +2223,30 @@ export default function App() {
               >
                 <Building2 className="w-4 h-4 text-[#008080]" />
                 <span>Partner With Us Portal (/partner-with-us)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigateTo('insurer', '/insurer');
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-teal-500/30 bg-teal-50/70 text-[#008080] text-xs font-semibold hover:bg-teal-100 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-[#008080]" />
+                <span>Insurer Partner Portal (/insurer)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigateTo('api-gateway', '/api-gateway');
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-teal-300 text-xs font-semibold hover:bg-slate-800 cursor-pointer"
+              >
+                <Cpu className="w-4 h-4 text-teal-400" />
+                <span>Universal Partner API Gateway (/api-gateway)</span>
               </button>
 
               {isLoggedIn && currentUser ? (
@@ -2688,6 +2953,11 @@ export default function App() {
                 }
                 if (isDoorstepPharmacy(service.id) || isDoorstepPharmacy(service.name)) {
                   navigateTo('doorstep-pharmacy', '/doorstep-pharmacy');
+                  return;
+                }
+                const dedicatedRoute = getServiceDedicatedRoute(service.id || service.name);
+                if (dedicatedRoute) {
+                  navigateTo(dedicatedRoute, `/${dedicatedRoute}`);
                   return;
                 }
                 setSelectedServiceForBooking(service);
@@ -3406,6 +3676,8 @@ export default function App() {
       <ServiceBookingModal
         service={selectedServiceForBooking}
         isOpen={isServiceBookingOpen}
+        isLoggedIn={isLoggedIn}
+        onPromptLogin={() => navigateTo('auth', '/auth')}
         onClose={() => {
           setIsServiceBookingOpen(false);
           setCustomPrefillSymptoms('');
@@ -3544,14 +3816,14 @@ export default function App() {
                     onChange={(e) => setBookingServiceType(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#008080] bg-white font-semibold text-[#002b49]"
                   >
-                    {marqueeServices.map((s) => (
-                      <option key={s.id} value={s.name}>
+                    {marqueeServices.map((s, sIdx) => (
+                      <option key={`marquee-svc-${s.id}-${sIdx}`} value={s.name}>
                         {s.name}
                       </option>
                     ))}
-                    <option value="Home Diagnostics">Home Diagnostics</option>
-                    <option value="Doctor Home Visits">Doctor Home Visits</option>
-                    <option value="Nursing & Care">Nursing & Care</option>
+                    <option key="opt-home-diagnostics" value="Home Diagnostics">Home Diagnostics</option>
+                    <option key="opt-doctor-home-visits" value="Doctor Home Visits">Doctor Home Visits</option>
+                    <option key="opt-nursing-care" value="Nursing & Care">Nursing & Care</option>
                   </select>
                   <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
                 </div>

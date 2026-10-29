@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { ServiceItem, BookingFormData } from '../types/serviceBooking';
 import { INDIAN_STATES, TIME_SLOTS } from '../data/servicesData';
+import { InsuranceClaimSection } from './InsuranceClaimSection';
+import { InsurancePaymentOption, InsuranceClaimDetails } from '../types/insurance';
 
 interface ServiceBookingModalProps {
   service: ServiceItem | null;
@@ -24,6 +26,8 @@ interface ServiceBookingModalProps {
   initialPhone?: string;
   initialName?: string;
   initialSymptoms?: string;
+  isLoggedIn?: boolean;
+  onPromptLogin?: () => void;
 }
 
 export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
@@ -34,6 +38,8 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
   initialPhone = '',
   initialName = '',
   initialSymptoms = '',
+  isLoggedIn = false,
+  onPromptLogin,
 }) => {
   // Tomorrow's date formatted as YYYY-MM-DD for sensible date default
   const getTomorrowDate = () => {
@@ -60,6 +66,9 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
     agreeTerms: false,
     agreePrivacy: false,
   });
+
+  const [paymentOption, setPaymentOption] = useState<InsurancePaymentOption>('pay_now');
+  const [insuranceClaim, setInsuranceClaim] = useState<InsuranceClaimDetails | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -155,6 +164,10 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
       newErrors.agreePrivacy = 'Privacy Policy consent is mandatory.';
     }
 
+    if (paymentOption === 'claim_insurance' && !insuranceClaim) {
+      newErrors.insurance = 'Please complete the insurance OTP verification above to confirm cashless claim.';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -162,7 +175,10 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
-      onSubmitBooking(formData);
+      onSubmitBooking({
+        ...formData,
+        insuranceClaim: paymentOption === 'claim_insurance' ? (insuranceClaim || undefined) : undefined,
+      });
     }
   };
 
@@ -365,8 +381,8 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                     className="w-full appearance-none px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-[#008080] pr-9 cursor-pointer"
                   >
-                    {INDIAN_STATES.map((st) => (
-                      <option key={st} value={st}>
+                    {INDIAN_STATES.map((st, sIdx) => (
+                      <option key={`state-opt-${st}-${sIdx}`} value={st}>
                         {st}
                       </option>
                     ))}
@@ -474,8 +490,8 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
                     onChange={(e) => setFormData({ ...formData, preferredTimeSlot: e.target.value })}
                     className="w-full appearance-none px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm text-slate-900 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-[#008080] pr-8 cursor-pointer"
                   >
-                    {TIME_SLOTS.map((slot) => (
-                      <option key={slot} value={slot}>
+                    {TIME_SLOTS.map((slot, sIdx) => (
+                      <option key={`slot-opt-${slot}-${sIdx}`} value={slot}>
                         {slot}
                       </option>
                     ))}
@@ -486,7 +502,34 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
             </div>
           </div>
 
-          {/* Section 6: Terms & Conditions and Mandate Privacy Policy Checkboxes */}
+          {/* Section 6: Payment & Cashless Insurance Claim Options */}
+          <div className="pt-2 border-t border-slate-200/80">
+            <InsuranceClaimSection
+              amount={1250}
+              serviceOrProductName={service.name}
+              defaultPhone={formData.phone}
+              defaultName={formData.patientName}
+              selectedOption={paymentOption}
+              isLoggedIn={isLoggedIn}
+              onPromptLogin={onPromptLogin}
+              onChangeOption={(opt) => {
+                setPaymentOption(opt);
+                if (errors.insurance) setErrors((prev) => ({ ...prev, insurance: '' }));
+              }}
+              onClaimConfirmed={(claim) => {
+                setInsuranceClaim(claim);
+                if (errors.insurance) setErrors((prev) => ({ ...prev, insurance: '' }));
+              }}
+            />
+            {errors.insurance && (
+              <p className="text-xs text-red-600 font-bold mt-1.5 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <span>{errors.insurance}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Section 7: Terms & Conditions and Mandate Privacy Policy Checkboxes */}
           <div className="pt-2 border-t border-slate-200/80 space-y-2.5">
             {/* Terms & Conditions Checkbox */}
             <label className="flex items-start gap-2.5 text-xs text-slate-700 cursor-pointer select-none">
@@ -529,18 +572,42 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
           <div className="pt-3">
             <button
               type="submit"
-              disabled={!formData.agreeTerms || !formData.agreePrivacy}
+              disabled={
+                !formData.agreeTerms ||
+                !formData.agreePrivacy ||
+                (paymentOption === 'claim_insurance' && !insuranceClaim)
+              }
               className={`w-full font-extrabold py-3.5 px-6 rounded-xl text-sm transition-all flex items-center justify-center gap-2 ${
-                !formData.agreeTerms || !formData.agreePrivacy
+                !formData.agreeTerms ||
+                !formData.agreePrivacy ||
+                (paymentOption === 'claim_insurance' && !insuranceClaim)
                   ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed opacity-60 shadow-none'
+                  : paymentOption === 'claim_insurance'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-md hover:shadow-lg active:scale-[0.99] cursor-pointer ring-2 ring-emerald-500/30'
                   : 'bg-gradient-to-r from-[#008080] to-[#006666] hover:from-[#006666] hover:to-[#004d4d] text-white shadow-md hover:shadow-lg active:scale-[0.99] cursor-pointer ring-2 ring-teal-500/30'
               }`}
             >
-              <CheckCircle2 className={`w-4 h-4 ${formData.agreeTerms && formData.agreePrivacy ? 'text-teal-200' : 'text-slate-400'}`} />
-              <span>Submit Request</span>
+              <CheckCircle2
+                className={`w-4 h-4 ${
+                  formData.agreeTerms &&
+                  formData.agreePrivacy &&
+                  (paymentOption !== 'claim_insurance' || insuranceClaim)
+                    ? 'text-teal-200'
+                    : 'text-slate-400'
+                }`}
+              />
+              <span>
+                {paymentOption === 'claim_insurance'
+                  ? insuranceClaim
+                    ? `Confirm Cashless Booking (Claim: ${insuranceClaim.claimId})`
+                    : 'Complete Insurance OTP Verification Above'
+                  : 'Submit Request & Proceed'}
+              </span>
             </button>
             <p className="text-center text-[11px] text-slate-400 mt-2">
-              Our clinical coordinator will instantly acknowledge your booking via WhatsApp &amp; SMS.
+              {paymentOption === 'claim_insurance' && insuranceClaim
+                ? 'Zero payment gateway deduction. Direct cashless claim pre-authorization confirmed.'
+                : 'Our clinical coordinator will instantly acknowledge your booking via WhatsApp & SMS.'}
             </p>
           </div>
         </form>
